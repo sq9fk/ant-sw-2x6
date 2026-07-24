@@ -25,6 +25,10 @@ podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z r
   `BCDmatrixOUT` w `PROGMEM` (czytaj `pgm_read_byte`); `port[8][6]` jest `byte`. Bloki WWW
   (przyciski poz. 0–7) są w pętli — przy zmianie HTML pilnuj identycznych nazw pól `S{bank}{kod}`,
   bo od nich zależy parsowanie `GET` (`HTTP_req.substring(7,8)`/`(8,10)`).
+- **Serwer WWW (konwencje):** statyczny nagłówek+CSS jest w PROGMEM (`HTTP_HEAD`/`HTTP_HEAD2`)
+  i wysyłany `sendP()` (chunki 64 B, `client.write`) — nie zamieniaj z powrotem na serie
+  `print(F())`. Parsowanie `GET` waliduje `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą
+  linię żądania i wtedy odpowiada (`if (c=='\n')`), potem `delay(1); client.stop()`.
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino

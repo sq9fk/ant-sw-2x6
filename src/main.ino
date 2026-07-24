@@ -118,6 +118,46 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
   EthernetServer server(80);              // server PORT
   String HTTP_req;
+
+  // SQ9FK: statyczne fragmenty strony w PROGMEM, wysylane jednym sendP() w wiekszych
+  // porcjach (mniej zapisow do W5500 -> krotsza transakcja -> mniejsza blokada PTT/switch).
+  const char HTTP_HEAD[] PROGMEM =
+    "HTTP/1.1 200 OK\r\n"
+    "Content-Type: text/html\r\n"
+    "Connection: close\r\n"
+    "\r\n"
+    "<!DOCTYPE html>\r\n<html>\r\n<head>\r\n";
+  const char HTTP_HEAD2[] PROGMEM =
+    "<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>\r\n"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\r\n"
+    "<meta name=\"mobile-web-app-capable\" content=\"yes\">\r\n"
+    "<style type=\"text/css\">\r\n"
+    "body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}\r\n"
+    "a:link  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
+    "a:visited  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
+    "a:hover  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
+    "input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}\r\n"
+    "input:hover {border: 2px solid #080;}\r\n"
+    "input.g {background: #080;color: #fff;}\r\n"
+    "input.gr {background: #800;color: #fff;}\r\n"
+    ".bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n"
+    ".bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n"
+    ".ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}\r\n"
+    "</style>\r\n</head>\r\n<body>\r\n";
+
+  // Wysyla lancuch z PROGMEM porcjami po 64 B (client.write zamiast setek print(char))
+  static void sendP(EthernetClient &cl, PGM_P p) {
+    char buf[64];
+    for (;;) {
+      byte n = 0;
+      while (n < sizeof(buf)) {
+        char ch = pgm_read_byte(p++);
+        if (ch == 0) { if (n) cl.write((const uint8_t*)buf, n); return; }
+        buf[n++] = ch;
+      }
+      cl.write((const uint8_t*)buf, n);
+    }
+  }
 #endif
 const byte BCDmatrixOUT[2][16] PROGMEM = {
                      { 0,  1,  2,  3,  4,  5,  4,  5,  4,  5,  6,  3,  3,  3,  3,  3 },
@@ -308,25 +348,18 @@ void loop() {
 #if defined(EthModule)
   EthernetClient client = server.available();
   if (client) {
-    boolean currentLineIsBlank = true;
     HTTP_req = "";  // SQ9FK: nowy bufor na kazde zadanie (ogranicza RAM miedzy zadaniami)
+    // SQ9FK (#4): czytamy tylko pierwsza linie zadania (GET ...) i od razu odpowiadamy
+    // -> mniej odczytow i krotsza blokada loop() (switching/PTT).
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
-        // SQ9FK: twardy limit dlugosci - parsowanie uzywa tylko poczatku linii GET
-        // (HTTP_req.substring(7,8) i (8,10)). Chroni przed przepelnieniem RAM przy
-        // dlugich/zlosliwych zadaniach HTTP.
-        if (HTTP_req.length() < 40) {
+        if (HTTP_req.length() < 40) {   // SQ9FK: limit - potrzebne tylko substring(7..10)
           HTTP_req += c;
         }
-        if (c == '\n' && currentLineIsBlank) {
-          client.println(F("HTTP/1.1 200 OK"));
-          client.println(F("Content-Type: text/html"));
-          client.println(F("Connection: close"));
-          client.println();
-          client.println(F("<!DOCTYPE html>"));
-          client.println(F("<html>"));
-          client.println(F("<head>"));
+        if (c == '\n') {                // koniec linii zadania -> generuj odpowiedz
+          // ---- naglowek HTTP + <head> + CSS: statyczne, z PROGMEM jednym sendP() (#1) ----
+          sendP(client, HTTP_HEAD);
           client.print(F("<title>"));
           client.print(Inputs);
           client.print(F("x"));
@@ -335,24 +368,7 @@ void loop() {
           client.print(F("<meta http-equiv=\"refresh\" content=\"10;url=http://"));
           client.print(Ethernet.localIP());
           client.println(F("\">"));
-          client.println(F("<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>"));
-          client.println(F("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">"));
-          client.println(F("<meta name=\"mobile-web-app-capable\" content=\"yes\">"));
-          client.println(F("<style type=\"text/css\">"));
-          client.println(F("body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}"));
-          client.println(F("a:link  {color: #888;font-weight: bold;text-decoration: none;}"));
-          client.println(F("a:visited  {color: #888;font-weight: bold;text-decoration: none;}"));
-          client.println(F("a:hover  {color: #888;font-weight: bold;text-decoration: none;}"));
-          client.println(F("input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}"));
-          client.println(F("input:hover {border: 2px solid #080;}"));
-          client.println(F("input.g {background: #080;color: #fff;}"));
-          client.println(F("input.gr {background: #800;color: #fff;}"));
-          client.println(F(".bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}"));
-          client.println(F(".bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}"));
-          client.println(F(".ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}"));
-          client.println(F("</style>"));
-          client.println(F("</head>"));
-          client.println(F("<body>"));
+          sendP(client, HTTP_HEAD2);
           client.print(F("<p><b>"));
           client.print(Inputs);
           client.print(F("x"));
@@ -363,12 +379,17 @@ void loop() {
           String GET = HTTP_req.substring(8, 10);
           int getVal = GET.toInt();
           int bankIdx = BANK.toInt() - 1;
-          if (getVal >= 0 && getVal <= 7) {
-            port[bankIdx][1] = getVal;
-          } else if (getVal == 20) {
-            port[bankIdx][4] = 0;
-          } else if (getVal == 21) {
-            port[bankIdx][4] = 1;
+          // SQ9FK (#2): dzialaj tylko na poprawne zadanie sterujace. Zapobiega
+          // przypadkowym przelaczeniom od obcych zadan (np. /favicon.ico, gole GET /)
+          // oraz zapisowi poza tablica port[] przy blednym numerze banku.
+          if (bankIdx >= 0 && bankIdx < Ports) {
+            if (getVal >= 0 && getVal <= 7) {
+              port[bankIdx][1] = getVal;
+            } else if (getVal == 20) {
+              port[bankIdx][4] = 0;
+            } else if (getVal == 21) {
+              port[bankIdx][4] = 1;
+            }
           }
 
           for (i = 0; i < Ports; i++) {
@@ -438,15 +459,8 @@ void loop() {
           client.println(F("V</p></body>"));
           client.println(F("</html>"));
 
-          Serial.print(HTTP_req);
           HTTP_req = "";
           break;
-        }
-        if (c == '\n') {
-          currentLineIsBlank = true;
-        }
-        else if (c != '\r') {
-          currentLineIsBlank = false;
         }
       }
     }

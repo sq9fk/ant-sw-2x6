@@ -99,7 +99,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **87,3%** / 26816 B, RAM **39,7%** / 814 B — po optymalizacji rozmiaru).
+> (Flash **86,8%** / 26662 B, RAM **39,7%** / 814 B — po optymalizacjach).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:
@@ -112,6 +112,15 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
   (odczyt: `antName()` / `pgm_read_byte` / `memcpy_P`) — **−264 B RAM**.
 - Generowanie przycisków WWW (poz. 0–7) i listy anten zwinięte w pętlę, `switch` na `GET`
   uproszczony do `if` — **−1808 B Flash** (bez zmiany wygenerowanego HTML).
+
+### Optymalizacje serwera WWW (zastosowane)
+
+- Statyczny nagłówek + CSS wysyłany z **PROGMEM** porcjami 64 B (`sendP()` → `client.write`)
+  zamiast ~30 `print()` — mniej zapisów do W5500 i **krótsza blokada `loop()`** (PTT/przełączanie).
+- **Walidacja żądania** (kontrola zakresu banku) — obce żądania (`/favicon.ico`, gołe `GET /`)
+  nie przełączają już anten i nie piszą poza tablicą `port[]` (usunięty ukryty błąd OOB).
+- Czytanie tylko pierwszej linii żądania (`GET …`) + usunięty debug `Serial.print` —
+  krótsza obsługa połączenia. Wygenerowany HTML bez zmian.
 
 ### Arduino IDE
 
