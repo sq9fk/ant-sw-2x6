@@ -73,7 +73,7 @@ to
   
 */
 //=====[ Settings ]===================================================
-char* ant[] = {
+const char* ant[] = {
   "OFF",  // <-- do not change this line
   "160m INV-V",
   "80m Dipole",
@@ -136,7 +136,7 @@ byte enc0PinALast = HIGH;
 int n = HIGH;
 boolean menu1state = false;
 boolean menu2state = false;
-long Timeout[5][2] = {
+unsigned long Timeout[5][2] = {
   {0, 100},
   {0, 500},
   {0, 1000},
@@ -738,7 +738,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
   Wire.beginTransmission(addr);
   Wire.write(0x12);
   Wire.endTransmission();
-  Wire.requestFrom(addr, 1);
+  Wire.requestFrom(addr, (byte)1);
 #if defined(inputHigh)
   a = Wire.read();
 #else
@@ -747,7 +747,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
   Wire.beginTransmission(addr);
   Wire.write(0x13);
   Wire.endTransmission();
-  Wire.requestFrom(addr, 1);
+  Wire.requestFrom(addr, (byte)1);
   b = ~Wire.read();
   if (Bank == 1) {
     //SQ9FK Deactivate PTT check

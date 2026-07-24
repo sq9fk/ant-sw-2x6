@@ -97,8 +97,8 @@ pio device monitor -b 9600
 w [`platformio.ini`](platformio.ini). Dla wariantu Ethernet (`#define EthModule`
 w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
-> Build zweryfikowany: `pio run -e nanoatmega328` → **SUCCESS**
-> (Flash 44,4% / 13652 B, RAM 59% / 1209 B; tylko nieszkodliwe ostrzeżenia).
+> Build zweryfikowany: `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
+> (Flash 44,4% / 13652 B, RAM 59% / 1209 B).
 
 ### Arduino IDE
 
