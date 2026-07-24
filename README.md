@@ -17,8 +17,14 @@ gdy oba TRX żądają tej samej anteny.
 - Pomiar napięcia zasilania na `A3` (ostrzeżenia LOW/HIGH < 10 V / > 15 V)
 - Opcjonalny moduł Ethernet (interfejs WWW) — domyślnie wyłączony (`#define EthModule`)
 
-Schemat urządzenia (RemoteQTH, rev 03):
-<https://remoteqth.com/hw/6x2-antenna-switch-control-03-sch.svg>
+Dokumentacja sprzętowa w repo:
+- Schemat (SVG): [`docs/6x2-antenna-switch-control-03-sch.svg`](docs/6x2-antenna-switch-control-03-sch.svg)
+- Projekt **KiCad** rev 03 (schemat + PCB + netlista): [`hw/`](hw/)
+- **Analiza połączeń** (pinout MCU, I²C, przekaźniki, BCD/PTT, OTRSP), zweryfikowana
+  netlistą: [`docs/CONNECTIONS.md`](docs/CONNECTIONS.md)
+
+Źródło sprzętu: RemoteQTH / OK1HRA, licencja **CC BY-SA 4.0**
+(<https://remoteqth.com/6x2-antenna-controler.php>).
 
 ## Funkcje / modyfikacje SQ9FK
 
@@ -52,27 +58,56 @@ a mapowanie BCD → wyjście w `BCDmatrixOUT[][]`.
 | `EthModule`   | włącza moduł Ethernet + interfejs WWW             |
 | `__USE_DHCP__`| DHCP dla modułu Ethernet                          |
 
-## Pliki w repozytorium
+## Struktura repozytorium
 
-| Plik | Opis |
-|------|------|
-| `SP9PDF-RemoteQTH-Antenna-Switch.ino` | **Aktualny firmware SP9PDF/SQ9FK** |
-| `ant-sw-6x2-04.ino` | wariant roboczy rev 04 (referencyjny) |
-| `ant-sw-6x2-03.ino` | wariant rev 03 (referencyjny) |
-| `ant-sw-6x2-03_orig.ino` | oryginalny firmware OK1HRA rev 0.3 |
+```
+.
+├── platformio.ini                 # konfiguracja budowania (Nano / ATmega328P)
+├── src/
+│   └── main.ino                   # AKTUALNY firmware SP9PDF/SQ9FK
+├── reference/                     # firmware referencyjny (nie budowany)
+│   ├── ant-sw-6x2-03_orig.ino     #   oryginał OK1HRA rev 0.3
+│   ├── ant-sw-6x2-03.ino          #   wariant rev 03
+│   └── ant-sw-6x2-04.ino          #   wariant rev 04
+├── docs/
+│   ├── 6x2-antenna-switch-control-03-sch.svg   # schemat (RemoteQTH rev 03)
+│   └── CONNECTIONS.md             # analiza połączeń (kod + netlista)
+├── hw/                            # projekt KiCad rev 03 (OK1HRA, CC BY-SA 4.0)
+│   ├── 6x2-antenna-switch-control-03.zip
+│   └── 6x2-antenna-switch-control-03/   # .sch, .kicad_pcb, .net, .lib, .pro
+├── README.md
+├── CLAUDE.md                      # wskazówki dla Claude Code
+└── LICENSE                        # GPLv3
+```
 
 ## Kompilacja i wgranie
 
-Arduino IDE:
+### PlatformIO (zalecane)
 
-1. Zainstaluj bibliotekę **LiquidCrystal** (w zestawie IDE). Dla wariantu Ethernet:
-   **Ethernet2** oraz zależności (`Dhcp.h`, `EthernetServer.h`).
+```bash
+# Nano ze STARYM bootloaderem (57600):
+pio run -e nanoatmega328 -t upload
+# Nano z NOWYM bootloaderem (115200):
+pio run -e nanoatmega328new -t upload
+# Podgląd portu szeregowego (9600):
+pio device monitor -b 9600
+```
+
+`LiquidCrystal` i `Wire` są częścią rdzenia Arduino AVR — nie trzeba nic doinstalowywać.
+Dla wariantu Ethernet (`#define EthModule` w `src/main.ino`) odkomentuj `lib_deps`
+w [`platformio.ini`](platformio.ini) (`arduino-libraries/Ethernet2`).
+
+### Arduino IDE
+
+1. Skopiuj `src/main.ino` do katalogu o tej samej nazwie (`main/main.ino`) lub zmień nazwę.
 2. Płytka: *Arduino Nano*, procesor *ATmega328P (Old Bootloader)* w razie potrzeby.
-3. Otwórz `SP9PDF-RemoteQTH-Antenna-Switch.ino`, wybierz port COM, *Upload*.
+3. Wybierz port COM, *Upload*.
 
 > Uwaga (z oryginału): dla szybszego startu z DHCP zmień w `Dhcp.h`
 > `timeout = 60000` na `6000`.
 
 ## Licencja
 
-GPL v3 — patrz [`LICENSE`](LICENSE). Oryginał © OK1HRA, modyfikacje © SQ9FK.
+- **Firmware** (`src/`, `reference/`): **GPL v3** — patrz [`LICENSE`](LICENSE).
+  Oryginał © OK1HRA, modyfikacje © SQ9FK.
+- **Sprzęt** (`hw/`, schemat): **CC BY-SA 4.0** © OK1HRA / RemoteQTH.com.

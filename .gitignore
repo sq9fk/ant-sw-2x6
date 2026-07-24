@@ -16,6 +16,11 @@ build/
 # Arduino IDE
 *.zip
 
+# KiCad backups / autosave (materiał roboczy edytora)
+*.bak
+*-bak
+_autosave-*
+
 # Editor / OS
 .vscode/
 .idea/
