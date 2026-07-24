@@ -93,9 +93,12 @@ pio run -e nanoatmega328new -t upload
 pio device monitor -b 9600
 ```
 
-`LiquidCrystal` i `Wire` są częścią rdzenia Arduino AVR — nie trzeba nic doinstalowywać.
-Dla wariantu Ethernet (`#define EthModule` w `src/main.ino`) odkomentuj `lib_deps`
-w [`platformio.ini`](platformio.ini) (`arduino-libraries/Ethernet2`).
+`Wire`/`SPI` są w rdzeniu AVR; `LiquidCrystal` PlatformIO pobiera automatycznie z `lib_deps`
+w [`platformio.ini`](platformio.ini). Dla wariantu Ethernet (`#define EthModule`
+w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
+
+> Build zweryfikowany: `pio run -e nanoatmega328` → **SUCCESS**
+> (Flash 44,4% / 13652 B, RAM 59% / 1209 B; tylko nieszkodliwe ostrzeżenia).
 
 ### Arduino IDE
 
