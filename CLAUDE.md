@@ -14,8 +14,12 @@ podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z r
 - MCU: **Arduino Nano (ATmega328P)**, framework Arduino.
 - Build: **PlatformIO** — `pio run` (env `nanoatmega328` = stary bootloader,
   `nanoatmega328new` = nowy). Wgranie: `pio run -t upload`. Monitor: 9600 8N1.
-  `LiquidCrystal` jest w `lib_deps` (NIE w rdzeniu PIO, inaczej niż w Arduino IDE);
-  `Wire`/`SPI` z rdzenia. Ostatni build: SUCCESS (Flash ~44%, RAM ~59%).
+  `LiquidCrystal` i `Ethernet2` (`adafruit/Ethernet2`, W5500) są w `lib_deps` (NIE w rdzeniu
+  PIO); `Wire`/`SPI` z rdzenia.
+- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` wykluczają się —
+  oba naraz to Flash ~97% / RAM ~70%. Domyślnie: **Ethernet WŁ., OTRSP WYŁ.**
+  (Flash 93,2%, RAM 52,6%). `OTRSP_parse()` i `serialEvent()` są pod `#if defined(OTRSP)`.
+  Włączenie OTRSP wymaga wyłączenia `EthModule` (i odwrotnie).
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino

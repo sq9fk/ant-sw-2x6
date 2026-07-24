@@ -89,10 +89,10 @@ const char* ant[] = {
 #define LCDculumn  16      //
 #define inputHigh          // enable input High level (default)
 //#define serialECHO       // enable TX echo on serial port
-#define OTRSP            // enable serial OTSRP on serial port
-#define OTRSP_DEBUG
+//#define OTRSP            // enable serial OTSRP on serial port (disabled to free flash for EthModule)
+//#define OTRSP_DEBUG
 #define SERBAUD    9600    // [baud] Serial port baudrate
-//#define EthModule        // enable Ethernet module
+#define EthModule        // enable Ethernet module
 #define __USE_DHCP__       // Uncoment to Enable DHCP
 //====================================================================
 #if defined(EthModule)
@@ -170,7 +170,9 @@ static byte in_len;      // Number of chars in buffer
 boolean stringComplete = false;  // whether the string is complete
 #endif
 
+#if defined(OTRSP)
 static void OTRSP_parse();
+#endif
 
 //=================================================================
 void setup()
@@ -796,6 +798,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
   }
 }
 
+#if defined(OTRSP)
 static void OTRSP_parse() {
 //----------------------------------------------------------------------
 // Parse and handle a command from the computer
@@ -954,5 +957,6 @@ void serialEvent() {
     // so the main loop can do something about it:
   }
 }
+#endif
 
 

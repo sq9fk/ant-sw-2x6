@@ -97,8 +97,13 @@ pio device monitor -b 9600
 w [`platformio.ini`](platformio.ini). Dla wariantu Ethernet (`#define EthModule`
 w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
-> Build zweryfikowany: `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash 44,4% / 13652 B, RAM 59% / 1209 B).
+> **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
+> `pio run -e nanoatmega328` → **SUCCESS** (Flash 93,2% / 28624 B, RAM 52,6% / 1078 B).
+>
+> ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP wykluczają się** — oba naraz
+> dają Flash ~97% i RAM ~70% (ryzykowne). Wybierz jeden:
+> - **Ethernet** (obecnie): `#define EthModule`, `//#define OTRSP`
+> - **OTRSP/SO2R**: `//#define EthModule`, `#define OTRSP` → Flash ~44%, RAM ~59%
 
 ### Arduino IDE
 
