@@ -117,7 +117,6 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   IPAddress subnet(255, 255, 255, 0);     // MASK
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
   EthernetServer server(80);              // server PORT
-  String HTTP_req;
 
   // SQ9FK: statyczne fragmenty strony w PROGMEM, wysylane jednym sendP() w wiekszych
   // porcjach (mniej zapisow do W5500 -> krotsza transakcja -> mniejsza blokada PTT/switch).
@@ -348,16 +347,20 @@ void loop() {
 #if defined(EthModule)
   EthernetClient client = server.available();
   if (client) {
-    HTTP_req = "";  // SQ9FK: nowy bufor na kazde zadanie (ogranicza RAM miedzy zadaniami)
+    // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Potrzebne tylko
+    // indeksy 7 (bank) i 8-9 (kod); reszta linii jest czytana, ale nie zapisywana.
+    char reqBuf[16];
+    byte reqLen = 0;
     // SQ9FK (#4): czytamy tylko pierwsza linie zadania (GET ...) i od razu odpowiadamy
     // -> mniej odczytow i krotsza blokada loop() (switching/PTT).
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
-        if (HTTP_req.length() < 40) {   // SQ9FK: limit - potrzebne tylko substring(7..10)
-          HTTP_req += c;
+        if (reqLen < sizeof(reqBuf) - 1) {
+          reqBuf[reqLen++] = c;
         }
         if (c == '\n') {                // koniec linii zadania -> generuj odpowiedz
+          reqBuf[reqLen] = '\0';
           // ---- naglowek HTTP + <head> + CSS: statyczne, z PROGMEM jednym sendP() (#1) ----
           sendP(client, HTTP_HEAD);
           client.print(F("<title>"));
@@ -375,10 +378,15 @@ void loop() {
           client.print(Ports);
           client.println(F(" SP9PDF - Antenna switch SQ9FK</b></p>"));
           client.println(F("<form method=\"get\">"));
-          String BANK = HTTP_req.substring(7, 8);
-          String GET = HTTP_req.substring(8, 10);
-          int getVal = GET.toInt();
-          int bankIdx = BANK.toInt() - 1;
+          // SQ9FK (#5): parsuj prosto z bufora - bank = znak[7], kod = znaki[8..9].
+          int bankIdx = -1, getVal = 0;
+          if (reqLen >= 10 &&
+              reqBuf[7] >= '0' && reqBuf[7] <= '9' &&
+              reqBuf[8] >= '0' && reqBuf[8] <= '9' &&
+              reqBuf[9] >= '0' && reqBuf[9] <= '9') {
+            bankIdx = (reqBuf[7] - '0') - 1;
+            getVal  = (reqBuf[8] - '0') * 10 + (reqBuf[9] - '0');
+          }
           // SQ9FK (#2): dzialaj tylko na poprawne zadanie sterujace. Zapobiega
           // przypadkowym przelaczeniom od obcych zadan (np. /favicon.ico, gole GET /)
           // oraz zapisowi poza tablica port[] przy blednym numerze banku.
@@ -459,7 +467,6 @@ void loop() {
           client.println(F("V</p></body>"));
           client.println(F("</html>"));
 
-          HTTP_req = "";
           break;
         }
       }

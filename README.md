@@ -99,7 +99,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **86,8%** / 26662 B, RAM **39,7%** / 814 B — po optymalizacjach).
+> (Flash **86,1%** / 26464 B, RAM **39,5%** / 808 B — po optymalizacjach).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:
@@ -121,6 +121,8 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
   nie przełączają już anten i nie piszą poza tablicą `port[]` (usunięty ukryty błąd OOB).
 - Czytanie tylko pierwszej linii żądania (`GET …`) + usunięty debug `Serial.print` —
   krótsza obsługa połączenia. Wygenerowany HTML bez zmian.
+- Parsowanie żądania **bez `String`** — bank/kod czytane wprost z bufora `char[16]`
+  (usunięty globalny `String HTTP_req`). Brak alokacji sterty na ścieżce żądania.
 
 ### Arduino IDE
 

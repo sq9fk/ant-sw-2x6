@@ -27,8 +27,10 @@ podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z r
   bo od nich zależy parsowanie `GET` (`HTTP_req.substring(7,8)`/`(8,10)`).
 - **Serwer WWW (konwencje):** statyczny nagłówek+CSS jest w PROGMEM (`HTTP_HEAD`/`HTTP_HEAD2`)
   i wysyłany `sendP()` (chunki 64 B, `client.write`) — nie zamieniaj z powrotem na serie
-  `print(F())`. Parsowanie `GET` waliduje `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą
-  linię żądania i wtedy odpowiada (`if (c=='\n')`), potem `delay(1); client.stop()`.
+  `print(F())`. Parsowanie `GET` jest bez `String` — bank/kod czytane wprost z `reqBuf[16]`
+  (bank = `reqBuf[7]`, kod = `reqBuf[8..9]`), z walidacją cyfr i `bankIdx 0..Ports-1`. Serwer
+  czyta tylko pierwszą linię żądania i wtedy odpowiada (`if (c=='\n')`), potem
+  `delay(1); client.stop()`. Nie przywracaj globalnego `String HTTP_req`.
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino
