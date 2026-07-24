@@ -309,10 +309,16 @@ void loop() {
   EthernetClient client = server.available();
   if (client) {
     boolean currentLineIsBlank = true;
+    HTTP_req = "";  // SQ9FK: nowy bufor na kazde zadanie (ogranicza RAM miedzy zadaniami)
     while (client.connected()) {
       if (client.available()) {
         char c = client.read();
-        HTTP_req += c;
+        // SQ9FK: twardy limit dlugosci - parsowanie uzywa tylko poczatku linii GET
+        // (HTTP_req.substring(7,8) i (8,10)). Chroni przed przepelnieniem RAM przy
+        // dlugich/zlosliwych zadaniach HTTP.
+        if (HTTP_req.length() < 40) {
+          HTTP_req += c;
+        }
         if (c == '\n' && currentLineIsBlank) {
           client.println(F("HTTP/1.1 200 OK"));
           client.println(F("Content-Type: text/html"));
