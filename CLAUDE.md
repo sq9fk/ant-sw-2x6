@@ -45,6 +45,21 @@ Zweryfikowany pinout i mapowanie połączeń: `docs/CONNECTIONS.md` (wyprowadzon
 `U6`(IN 0x21), drivery ULN `U4`/`U7`, LCD `U9`, opcjonalny W5500 `U1`. Nie modyfikować plików
 w `hw/` bez potrzeby — to materiał źródłowy autora.
 
+## Funkcje opcjonalne (#ifdef, na górze src/main.ino)
+
+- `WEB_ANT_NAMES` (WŁ.): nazwy anten 1–7 w RAM (`antRAM[9][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`),
+  ładowane z EEPROM (`loadAntNames()`), edytowane przez WWW (formularze `/?N{k}={nazwa}`,
+  `parseAntName()` z dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()`
+  (EEPROM.update). Bez tej flagi nazwy wracają do PROGMEM (`antDefault[]`), `antName()` zwraca
+  `__FlashStringHelper*`. **Nie zakładaj typu zwrotu `antName()`** — zależy od flagi (char* vs FSH),
+  ale `client.print()` i `String =` obsługują oba.
+- `BCD_INPUT` (WYŁ.): automatyczny wybór anteny z BCD radia. Wyłączony ⇒ brak `rx()`,
+  `BCDmatrixOUT`, przełącznika Manual/BCD (WWW), pozycji „8", zakres enkodera 0..7.
+- `PTT_BLOCKING` (WYŁ.): odczyt PTT (`port[i][2]`) + blokada `if(port[i][2]==0)` + plakietka PTT.
+  Wyłączony ⇒ przełączanie bezwarunkowe, brak PTT na LCD/WWW. **Wykrywanie kolizji między TRX
+  jest osobne i zostaje aktywne.**
+- Przy edycji sekcji WWW/GPIO/show()/rx() pilnuj tych `#ifdef`-ów (są w wielu miejscach naraz).
+
 ## Architektura kodu (src/main.ino)
 
 - **Model stanu**: tablica `port[8][6]` — wiersze 0–3 = wejścia TRX1–4, 4–7 = wyjścia.

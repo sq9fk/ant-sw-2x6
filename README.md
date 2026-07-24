@@ -41,22 +41,31 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania.
 - Interfejs WWW rozszerzony o 7. pozycję i etykietę „SP9PDF”.
 
-Nazwy anten konfiguruje się w tablicy `ant[]` na początku pliku
-[`SP9PDF-RemoteQTH-Antenna-Switch.ino`](SP9PDF-RemoteQTH-Antenna-Switch.ino),
-a mapowanie BCD → wyjście w `BCDmatrixOUT[][]`.
+Domyślne nazwy anten są w `antDefault[]` na początku `src/main.ino`. Przy włączonym
+`WEB_ANT_NAMES` nazwy 1–7 są **edytowalne przez WWW** i zapisywane w EEPROM (patrz niżej).
 
 ## Konfiguracja (dyrektywy `#define`)
 
-| Define        | Opis                                              |
-|---------------|---------------------------------------------------|
-| `Inputs`      | liczba anten (6)                                  |
-| `Ports`       | liczba par IN/OUT i linii LCD (2)                 |
-| `inputHigh`   | poziom aktywny wejść (HIGH — domyślnie)           |
-| `OTRSP`       | włącza sterowanie OTRSP po porcie szeregowym      |
-| `OTRSP_DEBUG` | logi diagnostyczne OTRSP                           |
-| `SERBAUD`     | prędkość portu szeregowego (9600)                 |
-| `EthModule`   | włącza moduł Ethernet + interfejs WWW             |
-| `__USE_DHCP__`| DHCP dla modułu Ethernet                          |
+| Define          | Opis                                                        |
+|-----------------|-------------------------------------------------------------|
+| `Inputs`        | liczba anten (6)                                            |
+| `Ports`         | liczba par IN/OUT i linii LCD (2)                           |
+| `inputHigh`     | poziom aktywny wejść (HIGH — domyślnie)                     |
+| `OTRSP`         | włącza sterowanie OTRSP po porcie szeregowym                |
+| `SERBAUD`       | prędkość portu szeregowego (9600)                           |
+| `EthModule`     | włącza moduł Ethernet + interfejs WWW                       |
+| `__USE_DHCP__`  | DHCP dla modułu Ethernet                                    |
+
+### Funkcje opcjonalne (SQ9FK)
+
+| Define          | Domyślnie | Opis                                                    |
+|-----------------|-----------|---------------------------------------------------------|
+| `WEB_ANT_NAMES` | **WŁ.**   | edycja nazw anten 1–7 przez WWW, zapis w EEPROM, limit `ANT_MAXLEN` (11 zn.) |
+| `BCD_INPUT`     | WYŁ.      | automatyczny wybór anteny z BCD radia (wejścia MCP IN); wyłączony = tryb wyłącznie ręczny (WWW/enkoder), bez przełącznika Manual/BCD |
+| `PTT_BLOCKING`  | WYŁ.      | odczyt PTT + blokada przełączania podczas TX + plakietka PTT; wyłączony zgodnie ze zmianą HW (gniazda PTT jako wyjścia) |
+
+> **Wykrywanie kolizji** między TRX (blokada tej samej anteny, para 4↔5 GXP) działa
+> **niezależnie** od `PTT_BLOCKING` — pozostaje aktywne.
 
 ## Struktura repozytorium
 
@@ -99,7 +108,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **86,1%** / 26464 B, RAM **39,5%** / 808 B — po optymalizacjach).
+> (Flash **83,0%** / 25512 B, RAM **44,7%** / 916 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:

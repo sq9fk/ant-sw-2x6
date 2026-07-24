@@ -73,7 +73,13 @@ to
   
 */
 //=====[ Settings ]===================================================
-// Nazwy anten trzymane w PROGMEM (oszczednosc RAM); odczyt przez antName().
+// ---- Funkcje opcjonalne (SQ9FK) -------------------------------------------
+//#define BCD_INPUT        // automatyczny wybor anteny z BCD radia (wejscia MCP IN) - WYLACZONE
+//#define PTT_BLOCKING     // odczyt PTT + blokada przelaczania podczas TX - WYLACZONE
+#define WEB_ANT_NAMES      // edycja nazw anten przez WWW + zapis w EEPROM (wymaga EthModule)
+#define ANT_MAXLEN 11      // limit dlugosci nazwy anteny (mieści sie na LCD: LCDculumn-5)
+
+// Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 i 8 nieedytowalne.
 const char ant_0[] PROGMEM = "OFF";          // <-- do not change this line
 const char ant_1[] PROGMEM = "160m INV-V";
 const char ant_2[] PROGMEM = "80m Dipole";
@@ -83,12 +89,57 @@ const char ant_5[] PROGMEM = "GXP11 20/10";
 const char ant_6[] PROGMEM = "UB50";
 const char ant_7[] PROGMEM = "6m 5el Yagi";
 const char ant_8[] PROGMEM = "M-off->BCD";   // <-- do not change this line
-const char* const ant[] PROGMEM = {
+const char* const antDefault[] PROGMEM = {
   ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6, ant_7, ant_8,
 };
-static const __FlashStringHelper* antName(byte idx) {
-  return (const __FlashStringHelper*)pgm_read_word(&ant[idx]);
-}
+#if defined(WEB_ANT_NAMES)
+  #include <EEPROM.h>
+  #define ANT_EE_MAGIC 0xA5
+  char antRAM[9][ANT_MAXLEN + 1];            // edytowalne nazwy w RAM (ladowane z EEPROM)
+  static const char* antName(byte idx) { return antRAM[idx]; }
+
+  static void loadAntNames() {
+    strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly
+    strcpy_P(antRAM[8], (PGM_P)pgm_read_word(&antDefault[8]));  // M-off->BCD - staly
+    boolean ok = (EEPROM.read(0) == ANT_EE_MAGIC);
+    for (byte k = 1; k <= 7; k++) {
+      if (ok) {
+        for (byte cc = 0; cc < ANT_MAXLEN; cc++)
+          antRAM[k][cc] = EEPROM.read(1 + (k - 1) * ANT_MAXLEN + cc);
+        antRAM[k][ANT_MAXLEN] = '\0';
+      } else {
+        strcpy_P(antRAM[k], (PGM_P)pgm_read_word(&antDefault[k]));
+      }
+    }
+  }
+  static void saveAntNames() {
+    for (byte k = 1; k <= 7; k++)
+      for (byte cc = 0; cc < ANT_MAXLEN; cc++)
+        EEPROM.update(1 + (k - 1) * ANT_MAXLEN + cc, antRAM[k][cc]);
+    EEPROM.update(0, ANT_EE_MAGIC);
+  }
+  static byte hexNib(char h) {
+    if (h >= '0' && h <= '9') return h - '0';
+    if (h >= 'A' && h <= 'F') return h - 'A' + 10;
+    if (h >= 'a' && h <= 'f') return h - 'a' + 10;
+    return 0;
+  }
+  // Dekoduje wartosc z URL (po '=') do antRAM[k], obcina do ANT_MAXLEN (#zabezpieczenie).
+  static void parseAntName(const char* q, byte k) {
+    byte n = 0;
+    while (*q && *q != ' ' && *q != '&' && n < ANT_MAXLEN) {
+      char ch = *q++;
+      if (ch == '+') ch = ' ';
+      else if (ch == '%' && q[0] && q[1]) { ch = (hexNib(q[0]) << 4) | hexNib(q[1]); q += 2; }
+      antRAM[k][n++] = ch;
+    }
+    antRAM[k][n] = '\0';
+  }
+#else
+  static const __FlashStringHelper* antName(byte idx) {
+    return (const __FlashStringHelper*)pgm_read_word(&antDefault[idx]);
+  }
+#endif
 #define Inputs      6      // number of antenna used ** not implemented ** //SQ9FK was 6
 #define Ports       2      // number of - IN/OUT pair devices and LCD lines (support from 2 to 4)
 #define LCDculumn  16      //
@@ -158,10 +209,12 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     }
   }
 #endif
+#if defined(BCD_INPUT)
 const byte BCDmatrixOUT[2][16] PROGMEM = {
                      { 0,  1,  2,  3,  4,  5,  4,  5,  4,  5,  6,  3,  3,  3,  3,  3 },
                      { 0,  1,  2,  3,  4,  5,  4,  5,  4,  5,  6,  3,  3,  3,  3,  3 },
 };
+#endif
 byte a = 0;
 byte b = 0;
 unsigned int ab;
@@ -224,6 +277,9 @@ static void OTRSP_parse();
 //=================================================================
 void setup()
 {
+#if defined(WEB_ANT_NAMES)
+  loadAntNames();          // SQ9FK: wczytaj nazwy anten z EEPROM (lub domyslne)
+#endif
   Wire.begin();
   for (i = 0; i < Ports; i++) {
     Wire.beginTransmission(port[i + 4][0]);
@@ -299,20 +355,17 @@ void loop() {
 
   //=====[ GPIOs 4]=================
   for (i = 0; i < Ports; i++) {
+#if defined(BCD_INPUT)
     if (menu1state == 1 && i == enc0Pos) {
-      if (port[i][1] != 8) { //SQ9FK is !=8 was !=7 added 7th ANT combination  
+      if (port[i][1] != 8) { //SQ9FK is !=8 was !=7 added 7th ANT combination
         port[i][4] = 1;
       } else {
         port[i][4] = 0;
       }
-      //SQ9FK Deactivate PTT check
-      //rx(port[i][0], i, 1, port[i][5]);
-    } else if (port[i][4] == 1) {
-      //SQ9FK Deactivate PTT check
-      //rx(port[i][0], i, 1, port[i][5]);
     } else if (port[i][4] == 0) {
-      rx(port[i][0], i, 0, port[i][5]);
+      rx(port[i][0], i, 0, port[i][5]);   // auto: wybor anteny z BCD radia
     }
+#endif
 
     c = 0;
     for (j = 0; j < Ports; j++) {
@@ -330,14 +383,16 @@ void loop() {
     }
     if (c > 0) {
       port[i][3] = 1;
-      if (port[i][2] == 0) {
-        port[i + 4][1] = 0;
-      }
+#if defined(PTT_BLOCKING)
+      if (port[i][2] == 0)
+#endif
+        port[i + 4][1] = 0;               // kolizja -> wyjscie OFF
     } else {
       port[i][3] = 0;
-      if (port[i][2] == 0) {
-        port[i + 4][1] = port[i][1];
-      }
+#if defined(PTT_BLOCKING)
+      if (port[i][2] == 0)
+#endif
+        port[i + 4][1] = port[i][1];      // brak kolizji -> wyjscie = wybor
     }
     if (port[i + 4][5] == 2) {
       tx(port[i + 4][0], i);
@@ -347,9 +402,13 @@ void loop() {
 #if defined(EthModule)
   EthernetClient client = server.available();
   if (client) {
-    // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Potrzebne tylko
-    // indeksy 7 (bank) i 8-9 (kod); reszta linii jest czytana, ale nie zapisywana.
+    // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Dla komend anteny
+    // potrzebne indeksy 7 (bank) i 8-9 (kod); dla edycji nazw (WEB_ANT_NAMES) tez wartosc.
+#if defined(WEB_ANT_NAMES)
+    char reqBuf[48];
+#else
     char reqBuf[16];
+#endif
     byte reqLen = 0;
     // SQ9FK (#4): czytamy tylko pierwsza linie zadania (GET ...) i od razu odpowiadamy
     // -> mniej odczytow i krotsza blokada loop() (switching/PTT).
@@ -378,25 +437,33 @@ void loop() {
           client.print(Ports);
           client.println(F(" SP9PDF - Antenna switch SQ9FK</b></p>"));
           client.println(F("<form method=\"get\">"));
-          // SQ9FK (#5): parsuj prosto z bufora - bank = znak[7], kod = znaki[8..9].
-          int bankIdx = -1, getVal = 0;
-          if (reqLen >= 10 &&
-              reqBuf[7] >= '0' && reqBuf[7] <= '9' &&
-              reqBuf[8] >= '0' && reqBuf[8] <= '9' &&
-              reqBuf[9] >= '0' && reqBuf[9] <= '9') {
-            bankIdx = (reqBuf[7] - '0') - 1;
-            getVal  = (reqBuf[8] - '0') * 10 + (reqBuf[9] - '0');
-          }
-          // SQ9FK (#2): dzialaj tylko na poprawne zadanie sterujace. Zapobiega
-          // przypadkowym przelaczeniom od obcych zadan (np. /favicon.ico, gole GET /)
-          // oraz zapisowi poza tablica port[] przy blednym numerze banku.
-          if (bankIdx >= 0 && bankIdx < Ports) {
-            if (getVal >= 0 && getVal <= 7) {
-              port[bankIdx][1] = getVal;
-            } else if (getVal == 20) {
-              port[bankIdx][4] = 0;
-            } else if (getVal == 21) {
-              port[bankIdx][4] = 1;
+          // SQ9FK (#5): parsuj prosto z bufora. Zadanie: /?S{bank}{kod} lub /?N{k}={nazwa}.
+#if defined(WEB_ANT_NAMES)
+          if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '7') {
+            parseAntName(reqBuf + 9, reqBuf[7] - '0');   // edycja nazwy anteny + zapis EEPROM
+            saveAntNames();
+          } else
+#endif
+          {
+            int bankIdx = -1, getVal = 0;
+            if (reqLen >= 10 &&
+                reqBuf[7] >= '0' && reqBuf[7] <= '9' &&
+                reqBuf[8] >= '0' && reqBuf[8] <= '9' &&
+                reqBuf[9] >= '0' && reqBuf[9] <= '9') {
+              bankIdx = (reqBuf[7] - '0') - 1;
+              getVal  = (reqBuf[8] - '0') * 10 + (reqBuf[9] - '0');
+            }
+            // SQ9FK (#2): dzialaj tylko na poprawne zadanie sterujace. Zapobiega
+            // przypadkowym przelaczeniom od obcych zadan (np. /favicon.ico, gole GET /)
+            // oraz zapisowi poza tablica port[] przy blednym numerze banku.
+            if (bankIdx >= 0 && bankIdx < Ports) {
+              if (getVal >= 0 && getVal <= 7) {
+                port[bankIdx][1] = getVal;
+              } else if (getVal == 20) {
+                port[bankIdx][4] = 0;
+              } else if (getVal == 21) {
+                port[bankIdx][4] = 1;
+              }
             }
           }
 
@@ -410,11 +477,13 @@ void loop() {
               client.print(F(" &#10148; "));
               client.print(port[i][1]);
               client.print(F("</span>"));
+#if defined(BCD_INPUT)
               if (port[i][4] == 0) {
                 client.print(F("<input type=\"submit\" name=\"S"));
                 client.print(i+1);
                 client.print(F("21\" value=\"Manual\"> "));
               } else {
+#endif
                 //SQ9FK: pozycje 0..7 generowane w petli (oszczednosc flash;
                 //wyjscie HTML identyczne z rozwinieta wersja)
                 for (byte pos = 0; pos <= 7; pos++) {
@@ -440,21 +509,39 @@ void loop() {
                     }
                   }
                 }
+#if defined(BCD_INPUT)
                 client.print(F("\"><input type=\"submit\" name=\"S"));
                 client.print(i+1);
                 client.print(F("20\" value=\"BCD-"));
                 client.print(i+1);
                 client.println(F("\"> "));
               }
+#else
+                client.println(F("\"> "));   // zamknij ostatni przycisk (bez przelacznika BCD)
+#endif
+#if defined(PTT_BLOCKING)
               if (port[i][2] == 1) {
                 client.print(F("<span class=\"ptt\">PTT</span>"));
               }
+#endif
               client.print(F("<br>"));
           }
 
           client.println(F("</form>"));
           client.println(F("<br><a href=\".\" onclick=\"window.open( this.href, this.href, 'width=450,height=200,left=0,top=0,menubar=no,location=no,status=no' ); return false;\" > split&#8599;</a>"));
           client.println(F("<br><p><b>Antennas:</b><br>"));
+#if defined(WEB_ANT_NAMES)
+          // SQ9FK: edycja nazw anten (1..7) - kazde pole ma wlasny formularz -> /?N{k}={nazwa}
+          for (byte k = 1; k <= 7; k++) {
+            client.print(F("<form method=\"get\" style=\"display:inline\"><b>"));
+            client.print(k);
+            client.print(F("</b> <input name=\"N"));
+            client.print(k);
+            client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
+            client.print(antName(k));
+            client.println(F("\"><input type=\"submit\" value=\"OK\"></form><br>"));
+          }
+#else
           client.print(F("<b>1</b> - ")); client.println(antName(1));
           client.print(F(" | <b>2</b> - ")); client.println(antName(2));
           client.print(F("<br><b>3</b> - ")); client.println(antName(3));
@@ -462,6 +549,7 @@ void loop() {
           client.print(F("<br><b>5</b> - ")); client.println(antName(5));
           client.print(F(" | <b>6</b> - ")); client.println(antName(6));
           client.println(F("<br><b>7</b> - ")); client.println(antName(7));
+#endif
           client.print(F("<br><b>Input power voltage: </b>"));
           client.print(volt(analogRead(A3)));
           client.println(F("V</p></body>"));
@@ -558,7 +646,11 @@ void encI(){
   if (menu1state == 0) {
     enc0Pos = enc2(enc0Pos, Ports-1, e);
   } else {
-    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7+1, e); //SQ9FK was Inputs+1 is 7+1
+#if defined(BCD_INPUT)
+    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7+1, e); //SQ9FK 0..8 (8 = tryb BCD)
+#else
+    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7, e);   //SQ9FK 0..7 (bez pozycji BCD)
+#endif
   }  
 }
 
@@ -630,9 +722,12 @@ void show(int portNR) {
   }
 
   lcd.setCursor(4, portNR);
+#if defined(PTT_BLOCKING)
   if (port[portNR][2] == 1) {
     lcd.write(byte(1));
-  } else {
+  } else
+#endif
+  {
     lcd.print(' ');
   }
   //=====[ Note ]=================
@@ -647,12 +742,14 @@ void show(int portNR) {
     Note += " ";
   }
   lcd.print(Note);
+#if defined(BCD_INPUT)
   if (port[portNR][1] == 8) { //SQ9FK is ==8 was ==7 added 7th ANT combination
     lcd.setCursor(5, portNR);
     lcd.write(byte(2));
     lcd.setCursor(15, portNR);
     lcd.print(portNR + 1);
   }
+#endif
 }
 
 //=====[ TX ]===================================================
@@ -718,6 +815,7 @@ float volt(int raw) {
 }
 
 //=====[ RX ]===================================================
+#if defined(BCD_INPUT)
 void rx(byte addr, int portNR, int PTTonly, int Bank) {
   Wire.beginTransmission(addr);
   Wire.write(0x12);
@@ -734,12 +832,13 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
   Wire.requestFrom(addr, (byte)1);
   b = ~Wire.read();
   if (Bank == 1) {
-    //SQ9FK Deactivate PTT check
+#if defined(PTT_BLOCKING)
     if (b & (1 << 1)) {
       port[portNR][2] = 1;
     } else {
       port[portNR][2] = 0;
     }
+#endif
     if (PTTonly == 0) {
       if (a & (1 << 0)) {
         a = a | (1 << 7);
@@ -766,12 +865,13 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
       port[portNR][1] = pgm_read_byte(&BCDmatrixOUT[0][a]);
     }
   } else if (Bank == 2) {
-    //SQ9FK Deactivate PTT check
+#if defined(PTT_BLOCKING)
     if (b & (1 << 0)) {
       port[portNR][2] = 1;
     } else {
       port[portNR][2] = 0;
     }
+#endif
     if (PTTonly == 0) {
       a = a >> 4;
       port[portNR][1] = pgm_read_byte(&BCDmatrixOUT[1][a]);
@@ -779,6 +879,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
     }
   }
 }
+#endif   // BCD_INPUT
 
 #if defined(OTRSP)
 static void OTRSP_parse() {

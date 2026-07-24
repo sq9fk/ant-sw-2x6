@@ -14,23 +14,17 @@
   header p { margin:4px 0 0; font-size:13px; color:var(--muted); }
   .wrap { display:flex; flex-wrap:wrap; gap:18px; padding:18px; align-items:flex-start; }
   .panel { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
-  .controls { flex:1 1 320px; min-width:300px; }
-  .preview  { flex:2 1 440px; min-width:360px; }
+  .controls { flex:1 1 260px; min-width:240px; }
+  .preview  { flex:2 1 460px; min-width:360px; }
   h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted);
        margin:0 0 12px; border-bottom:1px solid var(--line); padding-bottom:6px; }
-  .row { display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
-  .row label { font-size:13px; min-width:110px; }
-  input[type=number], input[type=text], select {
-     border:1px solid var(--line); border-radius:6px; padding:5px 8px; font-size:13px; color:var(--ink);
-     background:#fff; }
-  input[type=text] { flex:1; min-width:120px; }
+  .row { display:flex; align-items:center; gap:10px; margin:10px 0; flex-wrap:wrap; }
+  .row label { font-size:13px; min-width:130px; }
+  input[type=number] { border:1px solid var(--line); border-radius:6px; padding:5px 8px; font-size:13px; }
   .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
   .seg button { border:0; background:#fff; padding:5px 12px; cursor:pointer; font-size:13px; }
   .seg button.on { background:var(--accent); color:#fff; }
-  .trx { border:1px solid var(--line); border-radius:8px; padding:10px; margin:8px 0; }
-  .trx b { font-size:13px; }
-  .chk { display:inline-flex; align-items:center; gap:5px; font-size:13px; }
-  iframe { width:100%; height:340px; border:1px solid var(--line); border-radius:8px; background:#ccc; }
+  iframe { width:100%; height:420px; border:1px solid var(--line); border-radius:8px; background:#ccc; }
   .btn { border:1px solid var(--line); background:#fff; border-radius:6px; padding:6px 12px;
          cursor:pointer; font-size:13px; }
   .btn:hover { border-color:var(--accent); }
@@ -39,22 +33,19 @@
   textarea { width:100%; height:220px; margin-top:8px; font-family:ui-monospace, Consolas, monospace;
              font-size:12px; border:1px solid var(--line); border-radius:8px; padding:10px;
              white-space:pre; overflow:auto; }
-  .hint { font-size:12px; color:var(--muted); margin-top:10px; }
-  .names { columns:2; column-gap:10px; }
-  .names .row { margin:6px 0; }
-  .names label { min-width:20px; }
+  .hint { font-size:12px; color:var(--muted); margin-top:12px; }
 </style>
 </head>
 <body>
 <header>
   <h1>Symulator interfejsu WWW — SP9PDF RemoteQTH 6×2 Antenna Switch</h1>
-  <p>Odtwarza HTML/CSS generowany przez firmware (<code>src/main.ino</code>, sekcja EthModule) — do testowania wyglądu bez sprzętu.</p>
+  <p>Odtwarza stronę generowaną przez firmware w <b>domyślnej konfiguracji</b> (Ethernet WŁ.,
+     BCD/PTT WYŁ., edycja nazw anten WŁ.) — do testowania wyglądu bez sprzętu.</p>
 </header>
 
 <div class="wrap">
   <section class="panel controls">
     <h2>Sterowanie</h2>
-
     <div class="row">
       <label>Liczba TRX (Ports)</label>
       <span class="seg" id="segPorts">
@@ -66,19 +57,13 @@
       <label>Napięcie [V]</label>
       <input type="number" id="volt" value="13.8" step="0.1" style="width:90px">
     </div>
-
-    <h2 style="margin-top:16px">Stan TRX</h2>
-    <div id="trxControls"></div>
-
-    <h2 style="margin-top:16px">Nazwy anten</h2>
-    <div class="names" id="antNames"></div>
-
-    <div class="row" style="margin-top:14px">
+    <div class="row">
       <button class="btn" id="reset">Reset stanu</button>
     </div>
-    <p class="hint">Klikaj przyciski bezpośrednio na podglądzie urządzenia po prawej — działają jak na
-      prawdziwej stronie (submit <code>GET S{bank}{kod}</code>). Symulator pomija auto-odświeżanie
-      (<code>meta refresh</code>) i popup „split”, żeby nie nawigować.</p>
+    <p class="hint">Klikaj przyciski anten i pola nazw bezpośrednio na podglądzie po prawej —
+      działają jak na urządzeniu. Nazwy mają limit 11 znaków (jak w firmware). Kolizję zobaczysz
+      wybierając tę samą antenę (albo parę 4/5) na obu TRX. Symulator pomija auto-odświeżanie
+      i popup „split".</p>
   </section>
 
   <section class="panel preview">
@@ -92,32 +77,24 @@
 </div>
 
 <script>
-// ---- Stan (odzwierciedla tablice port[] i ant[] z firmware) ----------------
 const ANT_DEFAULT = ["OFF","160m INV-V","80m Dipole","Delta 80/40","GXP11 40",
                      "GXP11 20/10","UB50","6m 5el Yagi","M-off->BCD"];
+const ANT_MAXLEN = 11;
 const state = {
-  inputs: 6,          // stala z firmware (#define Inputs) - uzywana tylko w tytule "6x2"
-  ports: 2,
-  volt: "13.8",
+  inputs: 6, ports: 2, volt: "13.8",
   ant: ANT_DEFAULT.slice(),
-  // per-TRX: sel=wybrana antena(0..7), ptt, err(kolizja), manual(0=BCD/auto,1=manual)
-  port: []
+  port: []                        // per-TRX: {sel, err}
 };
-function initPorts() {
-  state.port = [];
-  for (let i=0;i<4;i++) state.port.push({sel:0, ptt:0, err:0, manual:0});
-}
+function initPorts(){ state.port = []; for (let i=0;i<4;i++) state.port.push({sel:0, err:0}); }
 initPorts();
 
-// ---- Logika kolizji (odpowiednik licznika c z loop() dla Ports TRX) --------
-// Kolizja gdy dwa TRX zadaja tej samej anteny (!=0), albo pary 4<->5 (GXP wspoldzieli tor).
-function recalcErr() {
-  for (let i=0;i<state.ports;i++) {
-    let c = 0;
-    const si = state.port[i].sel;
-    for (let j=0;j<state.ports;j++) {
+// Kolizja: dwa TRX zadaja tej samej anteny (!=0) albo pary 4<->5 (GXP wspoldzieli tor).
+function recalcErr(){
+  for (let i=0;i<state.ports;i++){
+    let c=0; const si=state.port[i].sel;
+    for (let j=0;j<state.ports;j++){
       if (i===j) continue;
-      const sj = state.port[j].sel;
+      const sj=state.port[j].sel;
       if (si!==0 && si===sj) c++;
       else if (si===4 && sj===5) c++;
       else if (si===5 && sj===4) c++;
@@ -126,156 +103,104 @@ function recalcErr() {
   }
 }
 
-// ---- Budowa dokladnego HTML strony urzadzenia (1:1 z client.print(F(...))) --
-function buildDeviceHTML() {
-  const P = state.ports, ant = state.ant;
-  let h = '';
-  h += '<!DOCTYPE html>\n<html>\n<head>\n';
-  h += '<title>'+state.inputs+'x'+P+' SP9PDF - Antenna switch</title>\n';
-  // (firmware ma tu <meta http-equiv="refresh" ...> do IP urzadzenia - pominiete w symulatorze)
-  h += "<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>\n";
-  h += '<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">\n';
-  h += '<meta name="mobile-web-app-capable" content="yes">\n';
-  h += '<style type="text/css">\n';
-  h += "body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}\n";
-  h += 'a:link  {color: #888;font-weight: bold;text-decoration: none;}\n';
-  h += 'a:visited  {color: #888;font-weight: bold;text-decoration: none;}\n';
-  h += 'a:hover  {color: #888;font-weight: bold;text-decoration: none;}\n';
-  h += 'input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}\n';
-  h += 'input:hover {border: 2px solid #080;}\n';
-  h += 'input.g {background: #080;color: #fff;}\n';
-  h += 'input.gr {background: #800;color: #fff;}\n';
-  h += '.bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\n';
-  h += '.bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\n';
-  h += '.ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}\n';
-  h += '</style>\n</head>\n<body>\n';
-  h += '<p><b>'+state.inputs+'x'+P+' SP9PDF - Antenna switch SQ9FK</b></p>\n';
-  h += '<form method="get">\n';
-  for (let i=0;i<P;i++) {
-    const p = state.port[i];
+// Dokladny HTML jak firmware (domyslna konfiguracja: bez Manual/BCD/PTT, z edycja nazw)
+function buildDeviceHTML(){
+  const P=state.ports, ant=state.ant;
+  let h='';
+  h += '<!DOCTYPE html>\r\n<html>\r\n<head>\r\n';
+  h += '<title>'+state.inputs+'x'+P+' SP9PDF - Antenna switch</title>\r\n';
+  h += "<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>\r\n";
+  h += '<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">\r\n';
+  h += '<meta name="mobile-web-app-capable" content="yes">\r\n';
+  h += '<style type="text/css">\r\n';
+  h += "body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}\r\n";
+  h += 'a:link  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
+  h += 'a:visited  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
+  h += 'a:hover  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
+  h += 'input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}\r\n';
+  h += 'input:hover {border: 2px solid #080;}\r\n';
+  h += 'input.g {background: #080;color: #fff;}\r\n';
+  h += 'input.gr {background: #800;color: #fff;}\r\n';
+  h += '.bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n';
+  h += '.bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n';
+  h += '.ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}\r\n';
+  h += '</style>\r\n</head>\r\n<body>\r\n';
+  h += '<p><b>'+state.inputs+'x'+P+' SP9PDF - Antenna switch SQ9FK</b></p>\r\n';
+  h += '<form method="get">\r\n';
+  for (let i=0;i<P;i++){
+    const p=state.port[i];
     h += '<span class="bcd'+(p.err?'r':'')+'">TRX'+(i+1)+' &#10148; '+p.sel+'</span>';
-    if (p.manual===0) {
-      h += '<input type="submit" name="S'+(i+1)+'21" value="Manual"> ';
-    } else {
-      for (let pos=0;pos<=7;pos++) {
-        h += (pos===0 ? '<input type="submit" name="S' : '"><input type="submit" name="S');
-        h += (i+1);
-        h += '0'+pos;
-        h += '" value="'+(pos===0?'-':pos)+'" class="';
-        if (p.sel===pos) { h += 'g'; if (p.err) h += 'r'; }
-      }
-      h += '"><input type="submit" name="S'+(i+1)+'20" value="BCD-'+(i+1)+'"> ';
+    for (let pos=0;pos<=7;pos++){
+      h += (pos===0 ? '<input type="submit" name="S' : '"><input type="submit" name="S');
+      h += (i+1); h += '0'+pos;
+      h += '" value="'+(pos===0?'-':pos)+'" class="';
+      if (p.sel===pos){ h+='g'; if (p.err) h+='r'; }
     }
-    if (p.ptt===1) h += '<span class="ptt">PTT</span>';
+    h += '"> ';                                  // zamkniecie ostatniego przycisku (bez BCD)
     h += '<br>';
   }
-  h += '\n</form>\n';
-  h += '<br><a href="." onclick="return false;">split&#8599;</a>\n';
-  h += '<br><p><b>Antennas:</b><br>\n';
-  h += '<b>1</b> - '+ant[1]+'\n';
-  h += ' | <b>2</b> - '+ant[2]+'\n';
-  h += '<br><b>3</b> - '+ant[3]+'\n';
-  h += ' | <b>4</b> - '+ant[4]+'\n';
-  h += '<br><b>5</b> - '+ant[5]+'\n';
-  h += ' | <b>6</b> - '+ant[6]+'\n';
-  h += '<br><b>7</b> - '+ant[7]+'\n';
-  h += '<br><b>Input power voltage: </b>'+state.volt+'V</p></body>\n</html>';
+  h += '\r\n</form>\r\n';
+  h += '<br><a href="." onclick="return false;">split&#8599;</a>\r\n';
+  h += '<br><p><b>Antennas:</b><br>\r\n';
+  for (let k=1;k<=7;k++){
+    h += '<form method="get" style="display:inline"><b>'+k+'</b> <input name="N'+k+
+         '" maxlength="11" size="12" value="'+ant[k].replace(/"/g,'&quot;')+
+         '"><input type="submit" value="OK"></form><br>\r\n';
+  }
+  h += '<br><b>Input power voltage: </b>'+state.volt+'V</p></body>\r\n</html>';
   return h;
 }
 
-// ---- Obsluga klikniecia przycisku (odpowiednik parsowania GET) -------------
-function handleGet(name) {          // name np. "S101": S + bank + kod2cyfrowy
-  const bank = parseInt(name.charAt(1), 10);
-  const code = parseInt(name.substring(2), 10);
-  const p = state.port[bank-1];
-  if (!p) return;
-  if (code>=0 && code<=7) p.sel = code;
-  else if (code===20) p.manual = 0;
-  else if (code===21) p.manual = 1;
+// Klikniecie przycisku anteny: /?S{bank}{kod}
+function handleGet(name){
+  const bank=parseInt(name.charAt(1),10);
+  const code=parseInt(name.substring(2),10);
+  const p=state.port[bank-1]; if(!p) return;
+  if (code>=0 && code<=7) p.sel=code;           // wybor anteny (tryb zawsze reczny)
   render();
 }
 
-// ---- Render: iframe + zrodlo ----------------------------------------------
-const dev = document.getElementById('dev');
-const srcBox = document.getElementById('src');
-function render() {
+const dev=document.getElementById('dev'), srcBox=document.getElementById('src');
+function render(){
   recalcErr();
-  const html = buildDeviceHTML();
-  srcBox.value = html;
-  dev.onload = () => {
-    try {
-      const d = dev.contentDocument;
-      d.querySelectorAll('input[type=submit]').forEach(inp => {
-        inp.addEventListener('click', ev => { ev.preventDefault(); handleGet(inp.getAttribute('name')); });
+  const html=buildDeviceHTML();
+  srcBox.value=html;
+  dev.onload=()=>{
+    try{
+      const d=dev.contentDocument;
+      d.querySelectorAll('input[type=submit]').forEach(inp=>{
+        inp.addEventListener('click',ev=>{
+          ev.preventDefault();
+          const form=inp.form;
+          const nameInp=form && form.querySelector('input[name^="N"]');
+          if (nameInp){                          // zapis nazwy anteny (limit 11 znakow)
+            const k=parseInt(nameInp.name.substring(1),10);
+            state.ant[k]=nameInp.value.substring(0,ANT_MAXLEN);
+            render();
+          } else {
+            handleGet(inp.getAttribute('name'));  // przycisk anteny
+          }
+        });
       });
-      const a = d.querySelector('a'); if (a) a.addEventListener('click', ev=>ev.preventDefault());
-    } catch(e) { /* same-origin srcdoc: powinno dzialac */ }
+      const a=d.querySelector('a'); if(a) a.addEventListener('click',ev=>ev.preventDefault());
+    }catch(e){}
   };
-  dev.srcdoc = html;
+  dev.srcdoc=html;
 }
 
-// ---- Panel sterowania ------------------------------------------------------
-function buildControls() {
-  // Ports segment
+function buildControls(){
   document.querySelectorAll('#segPorts button').forEach(b=>{
     b.classList.toggle('on', parseInt(b.dataset.p,10)===state.ports);
-    b.onclick = () => { state.ports = parseInt(b.dataset.p,10); buildControls(); render(); };
-  });
-  // per-TRX
-  const box = document.getElementById('trxControls');
-  box.innerHTML = '';
-  for (let i=0;i<state.ports;i++) {
-    const p = state.port[i];
-    const div = document.createElement('div');
-    div.className = 'trx';
-    div.innerHTML =
-      '<b>TRX'+(i+1)+'</b>'+
-      '<div class="row" style="margin-top:6px">'+
-        '<label class="chk"><input type="checkbox" '+(p.ptt?'checked':'')+' data-ptt="'+i+'"> PTT</label>'+
-        '<label style="min-width:auto">Tryb:</label>'+
-        '<span>'+(p.manual? 'Manual':'BCD/auto')+'</span>'+
-      '</div>'+
-      '<div class="row">'+
-        '<label style="min-width:auto">Symuluj pasmo BCD (gdy auto):</label>'+
-        '<select data-bcd="'+i+'">'+
-          [0,1,2,3,4,5,6,7].map(v=>'<option value="'+v+'"'+(p.sel===v?' selected':'')+'>'+v+'</option>').join('')+
-        '</select>'+
-      '</div>';
-    box.appendChild(div);
-  }
-  box.querySelectorAll('input[data-ptt]').forEach(c=>{
-    c.onchange = () => { state.port[+c.dataset.ptt].ptt = c.checked?1:0; render(); };
-  });
-  box.querySelectorAll('select[data-bcd]').forEach(s=>{
-    s.onchange = () => { state.port[+s.dataset.bcd].sel = parseInt(s.value,10); render(); };
+    b.onclick=()=>{ state.ports=parseInt(b.dataset.p,10); buildControls(); render(); };
   });
 }
-
-// nazwy anten (1..7) + note(8)
-function buildAntNames() {
-  const box = document.getElementById('antNames');
-  box.innerHTML = '';
-  for (let k=1;k<=7;k++) {
-    const row = document.createElement('div');
-    row.className = 'row';
-    row.innerHTML = '<label>'+k+'</label><input type="text" value="'+
-                    state.ant[k].replace(/"/g,'&quot;')+'" data-ant="'+k+'">';
-    box.appendChild(row);
-  }
-  box.querySelectorAll('input[data-ant]').forEach(inp=>{
-    inp.oninput = () => { state.ant[+inp.dataset.ant] = inp.value; render(); };
-  });
-}
-
-document.getElementById('volt').oninput = (e)=>{ state.volt = e.target.value; render(); };
-document.getElementById('reset').onclick = ()=>{
-  initPorts(); state.ant = ANT_DEFAULT.slice(); state.volt="13.8"; state.ports=2;
-  buildControls(); buildAntNames(); document.getElementById('volt').value="13.8"; render();
+document.getElementById('volt').oninput=(e)=>{ state.volt=e.target.value; render(); };
+document.getElementById('reset').onclick=()=>{
+  initPorts(); state.ant=ANT_DEFAULT.slice(); state.volt="13.8"; state.ports=2;
+  document.getElementById('volt').value="13.8"; buildControls(); render();
 };
 
-// start
 buildControls();
-buildAntNames();
 render();
 </script>
 </body>
