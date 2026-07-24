@@ -73,17 +73,22 @@ to
   
 */
 //=====[ Settings ]===================================================
-const char* ant[] = {
-  "OFF",  // <-- do not change this line
-  "160m INV-V",
-  "80m Dipole",
-  "Delta 80/40",
-  "GXP11 40",
-  "GXP11 20/10",
-  "UB50",
-  "6m 5el Yagi",
-  "M-off->BCD",  // <-- do not change this line
+// Nazwy anten trzymane w PROGMEM (oszczednosc RAM); odczyt przez antName().
+const char ant_0[] PROGMEM = "OFF";          // <-- do not change this line
+const char ant_1[] PROGMEM = "160m INV-V";
+const char ant_2[] PROGMEM = "80m Dipole";
+const char ant_3[] PROGMEM = "Delta 80/40";
+const char ant_4[] PROGMEM = "GXP11 40";
+const char ant_5[] PROGMEM = "GXP11 20/10";
+const char ant_6[] PROGMEM = "UB50";
+const char ant_7[] PROGMEM = "6m 5el Yagi";
+const char ant_8[] PROGMEM = "M-off->BCD";   // <-- do not change this line
+const char* const ant[] PROGMEM = {
+  ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6, ant_7, ant_8,
 };
+static const __FlashStringHelper* antName(byte idx) {
+  return (const __FlashStringHelper*)pgm_read_word(&ant[idx]);
+}
 #define Inputs      6      // number of antenna used ** not implemented ** //SQ9FK was 6
 #define Ports       2      // number of - IN/OUT pair devices and LCD lines (support from 2 to 4)
 #define LCDculumn  16      //
@@ -114,7 +119,7 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   EthernetServer server(80);              // server PORT
   String HTTP_req;
 #endif
-int BCDmatrixOUT[2][16] = {
+const byte BCDmatrixOUT[2][16] PROGMEM = {
                      { 0,  1,  2,  3,  4,  5,  4,  5,  4,  5,  6,  3,  3,  3,  3,  3 },
                      { 0,  1,  2,  3,  4,  5,  4,  5,  4,  5,  6,  3,  3,  3,  3,  3 },
 };
@@ -145,14 +150,17 @@ unsigned long Timeout[5][2] = {
 };
 boolean buttonActive = false;
 boolean longPressActive = false;
-byte ERR[8] = {0b11111, 0b11011, 0b11011, 0b11011, 0b11011, 0b11111, 0b11011, 0b11111};
-byte PTT[8] = {0b11111, 0b10011, 0b10101, 0b10101, 0b10011, 0b10111, 0b10111, 0b11111};
-byte MAN[8] = {0b11111, 0b01110, 0b00100, 0b01010, 0b01110, 0b01110, 0b01110, 0b11111};
-byte Cursor[8] = {0b00000, 0b00000, 0b11000, 0b11000, 0b11000, 0b00000, 0b00000, 0b00000};
-byte mCursor[8] = {0b00011, 0b00010, 0b11010, 0b11010, 0b11010, 0b00010, 0b00011, 0b00000};
-byte m[8] = {0b00011, 0b00010, 0b00010, 0b00010, 0b00010, 0b00010, 0b00011, 0b00000};
+// Glify LCD w PROGMEM (CGRAM 0..5): ERR, PTT, MAN, Cursor, mCursor, m
+const byte glyphs[6][8] PROGMEM = {
+  {0b11111, 0b11011, 0b11011, 0b11011, 0b11011, 0b11111, 0b11011, 0b11111}, // 0 ERR
+  {0b11111, 0b10011, 0b10101, 0b10101, 0b10011, 0b10111, 0b10111, 0b11111}, // 1 PTT
+  {0b11111, 0b01110, 0b00100, 0b01010, 0b01110, 0b01110, 0b01110, 0b11111}, // 2 MAN
+  {0b00000, 0b00000, 0b11000, 0b11000, 0b11000, 0b00000, 0b00000, 0b00000}, // 3 Cursor
+  {0b00011, 0b00010, 0b11010, 0b11010, 0b11010, 0b00010, 0b00011, 0b00000}, // 4 mCursor
+  {0b00011, 0b00010, 0b00010, 0b00010, 0b00010, 0b00010, 0b00011, 0b00000}, // 5 m
+};
 String Note;
-int port[8][6] = {
+byte port[8][6] = {
   //  adr   # ptt Err Manual part
   { 0x21, 0, 0,  0, 0, 1 }, // port1 IN
   { 0x21, 0, 0,  0, 0, 2 }, // port2 IN
@@ -200,12 +208,11 @@ void setup()
 
   delay(2000);      //5S
   lcd.clear();
-  lcd.createChar(0, ERR);
-  lcd.createChar(1, PTT);
-  lcd.createChar(2, MAN);
-  lcd.createChar(3, Cursor);
-  lcd.createChar(4, mCursor);
-  lcd.createChar(5, m);
+  byte cbuf[8];
+  for (byte g = 0; g < 6; g++) {
+    memcpy_P(cbuf, glyphs[g], 8);
+    lcd.createChar(g, cbuf);
+  }
   pinMode(swLED, OUTPUT);
   digitalWrite (swLED, LOW);
   pinMode(sw, INPUT);
@@ -348,17 +355,14 @@ void loop() {
           client.println(F("<form method=\"get\">"));
           String BANK = HTTP_req.substring(7, 8);
           String GET = HTTP_req.substring(8, 10);
-          switch (GET.toInt()) {
-            case 0: port[BANK.toInt()-1][1] = 0; break;
-            case 1: port[BANK.toInt()-1][1] = 1; break;
-            case 2: port[BANK.toInt()-1][1] = 2; break;
-            case 3: port[BANK.toInt()-1][1] = 3; break;
-            case 4: port[BANK.toInt()-1][1] = 4; break;
-            case 5: port[BANK.toInt()-1][1] = 5; break;
-            case 6: port[BANK.toInt()-1][1] = 6; break;
-            case 7: port[BANK.toInt()-1][1] = 7; break;
-            case 20: port[BANK.toInt()-1][4] = 0; break;
-            case 21: port[BANK.toInt()-1][4] = 1; break;
+          int getVal = GET.toInt();
+          int bankIdx = BANK.toInt() - 1;
+          if (getVal >= 0 && getVal <= 7) {
+            port[bankIdx][1] = getVal;
+          } else if (getVal == 20) {
+            port[bankIdx][4] = 0;
+          } else if (getVal == 21) {
+            port[bankIdx][4] = 1;
           }
 
           for (i = 0; i < Ports; i++) {
@@ -376,80 +380,31 @@ void loop() {
                 client.print(i+1);
                 client.print(F("21\" value=\"Manual\"> "));
               } else {
-                client.print(F("<input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("00\" value=\"-\" class=\""));
-                if (port[i][1] == 0) {
-                  client.print(F("g"));
-                  if (port[i][1] == 0 && port[i][3] == 1) {
-                    client.print(F("r"));
+                //SQ9FK: pozycje 0..7 generowane w petli (oszczednosc flash;
+                //wyjscie HTML identyczne z rozwinieta wersja)
+                for (byte pos = 0; pos <= 7; pos++) {
+                  if (pos == 0) {
+                    client.print(F("<input type=\"submit\" name=\"S"));
+                  } else {
+                    client.print(F("\"><input type=\"submit\" name=\"S"));
+                  }
+                  client.print(i+1);
+                  client.print(F("0"));
+                  client.print(pos);
+                  client.print(F("\" value=\""));
+                  if (pos == 0) {
+                    client.print(F("-"));
+                  } else {
+                    client.print(pos);
+                  }
+                  client.print(F("\" class=\""));
+                  if (port[i][1] == pos) {
+                    client.print(F("g"));
+                    if (port[i][3] == 1) {
+                      client.print(F("r"));
+                    }
                   }
                 }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("01\" value=\"1\" class=\""));
-                if (port[i][1] == 1) {
-                  client.print(F("g"));
-                  if (port[i][1] == 1 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("02\" value=\"2\" class=\""));
-                if (port[i][1] == 2) {
-                  client.print(F("g"));
-                  if (port[i][1] == 2 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("03\" value=\"3\" class=\""));
-                if (port[i][1] == 3) {
-                  client.print(F("g"));
-                  if (port[i][1] == 3 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("04\" value=\"4\" class=\""));
-                if (port[i][1] == 4) {
-                  client.print(F("g"));
-                  if (port[i][1] == 4 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("05\" value=\"5\" class=\""));
-                if (port[i][1] == 5) {
-                  client.print(F("g"));
-                  if (port[i][1] == 5 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("06\" value=\"6\" class=\""));
-                if (port[i][1] == 6) {
-                  client.print(F("g"));
-                  if (port[i][1] == 6 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                //SQ9FK add 7th position
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("07\" value=\"7\" class=\""));
-                if (port[i][1] == 7) {
-                  client.print(F("g"));
-                  if (port[i][1] == 7 && port[i][3] == 1) {
-                    client.print(F("r"));
-                  }
-                }
-                //end
                 client.print(F("\"><input type=\"submit\" name=\"S"));
                 client.print(i+1);
                 client.print(F("20\" value=\"BCD-"));
@@ -465,13 +420,13 @@ void loop() {
           client.println(F("</form>"));
           client.println(F("<br><a href=\".\" onclick=\"window.open( this.href, this.href, 'width=450,height=200,left=0,top=0,menubar=no,location=no,status=no' ); return false;\" > split&#8599;</a>"));
           client.println(F("<br><p><b>Antennas:</b><br>"));
-          client.print(F("<b>1</b> - ")); client.println(ant[1]);
-          client.print(F(" | <b>2</b> - ")); client.println(ant[2]);
-          client.print(F("<br><b>3</b> - ")); client.println(ant[3]);
-          client.print(F(" | <b>4</b> - ")); client.println(ant[4]);
-          client.print(F("<br><b>5</b> - ")); client.println(ant[5]);
-          client.print(F(" | <b>6</b> - ")); client.println(ant[6]);
-          client.println(F("<br><b>7</b> - ")); client.println(ant[7]);
+          client.print(F("<b>1</b> - ")); client.println(antName(1));
+          client.print(F(" | <b>2</b> - ")); client.println(antName(2));
+          client.print(F("<br><b>3</b> - ")); client.println(antName(3));
+          client.print(F(" | <b>4</b> - ")); client.println(antName(4));
+          client.print(F("<br><b>5</b> - ")); client.println(antName(5));
+          client.print(F(" | <b>6</b> - ")); client.println(antName(6));
+          client.println(F("<br><b>7</b> - ")); client.println(antName(7));
           client.print(F("<br><b>Input power voltage: </b>"));
           client.print(volt(analogRead(A3)));
           client.println(F("V</p></body>"));
@@ -658,7 +613,7 @@ void show(int portNR) {
   if (port[portNR][3] == 1 && port[portNR][1] != 0) {
     Note = "- (used)";
   } else {
-    Note = ant[port[portNR][1]];
+    Note = antName(port[portNR][1]);
   }
   Note.remove(LCDculumn - 5);
   while (Note.length() < LCDculumn - 5) {
@@ -781,7 +736,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
       };
       a = a >> 4;
 
-      port[portNR][1] = BCDmatrixOUT[0][a];
+      port[portNR][1] = pgm_read_byte(&BCDmatrixOUT[0][a]);
     }
   } else if (Bank == 2) {
     //SQ9FK Deactivate PTT check
@@ -792,7 +747,7 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
     }
     if (PTTonly == 0) {
       a = a >> 4;
-      port[portNR][1] = BCDmatrixOUT[1][a];
+      port[portNR][1] = pgm_read_byte(&BCDmatrixOUT[1][a]);
 
     }
   }

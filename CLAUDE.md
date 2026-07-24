@@ -16,10 +16,15 @@ podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z r
   `nanoatmega328new` = nowy). Wgranie: `pio run -t upload`. Monitor: 9600 8N1.
   `LiquidCrystal` i `Ethernet2` (`adafruit/Ethernet2`, W5500) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
-- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` wykluczają się —
-  oba naraz to Flash ~97% / RAM ~70%. Domyślnie: **Ethernet WŁ., OTRSP WYŁ.**
-  (Flash 93,2%, RAM 52,6%). `OTRSP_parse()` i `serialEvent()` są pod `#if defined(OTRSP)`.
-  Włączenie OTRSP wymaga wyłączenia `EthModule` (i odwrotnie).
+- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno.
+  Domyślnie: **Ethernet WŁ., OTRSP WYŁ.** — po optymalizacji Flash **87,3%** / RAM **39,7%**.
+  `OTRSP_parse()` i `serialEvent()` są pod `#if defined(OTRSP)`. Włączenie OTRSP wymaga
+  wyłączenia `EthModule` (i odwrotnie).
+- **Optymalizacja rozmiaru — konwencje do zachowania:** `ant[]` i `glyphs[6][8]` są w `PROGMEM`
+  (nazwy anten czytaj przez `antName(idx)` → `__FlashStringHelper*`; glify przez `memcpy_P`);
+  `BCDmatrixOUT` w `PROGMEM` (czytaj `pgm_read_byte`); `port[8][6]` jest `byte`. Bloki WWW
+  (przyciski poz. 0–7) są w pętli — przy zmianie HTML pilnuj identycznych nazw pól `S{bank}{kod}`,
+  bo od nich zależy parsowanie `GET` (`HTTP_req.substring(7,8)`/`(8,10)`).
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino

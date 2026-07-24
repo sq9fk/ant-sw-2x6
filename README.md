@@ -98,12 +98,20 @@ w [`platformio.ini`](platformio.ini). Dla wariantu Ethernet (`#define EthModule`
 w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
-> `pio run -e nanoatmega328` → **SUCCESS** (Flash 93,2% / 28624 B, RAM 52,6% / 1078 B).
+> `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
+> (Flash **87,3%** / 26816 B, RAM **39,7%** / 814 B — po optymalizacji rozmiaru).
 >
-> ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP wykluczają się** — oba naraz
-> dają Flash ~97% i RAM ~70% (ryzykowne). Wybierz jeden:
+> ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
+> Wybór konfiguracji:
 > - **Ethernet** (obecnie): `#define EthModule`, `//#define OTRSP`
-> - **OTRSP/SO2R**: `//#define EthModule`, `#define OTRSP` → Flash ~44%, RAM ~59%
+> - **OTRSP/SO2R**: `//#define EthModule`, `#define OTRSP` → Flash ~40%, RAM ~46%
+
+### Optymalizacje rozmiaru (zastosowane)
+
+- `port[8][6]`, `BCDmatrixOUT` → `byte` / `PROGMEM`; `ant[]` i glify LCD → `PROGMEM`
+  (odczyt: `antName()` / `pgm_read_byte` / `memcpy_P`) — **−264 B RAM**.
+- Generowanie przycisków WWW (poz. 0–7) i listy anten zwinięte w pętlę, `switch` na `GET`
+  uproszczony do `if` — **−1808 B Flash** (bez zmiany wygenerowanego HTML).
 
 ### Arduino IDE
 
