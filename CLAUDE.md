@@ -6,8 +6,10 @@ Wskazówki dla Claude Code przy pracy nad tym repozytorium.
 
 Firmware sterownika przełącznika antenowego **6 anten × 2 TRX** dla stacji SP9PDF.
 Bazuje na RemoteQTH 6×2 Antenna Controller (OK1HRA, rev 0.3), zmodyfikowany przez SQ9FK.
-Cel: dwa transceivery bezkolizyjnie współdzielą zestaw anten, z blokadą przełączania
-podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z radia, OTRSP).
+Cel: dwa transceivery bezkolizyjnie współdzielą zestaw anten. Sterowanie ręczne
+(enkoder/LCD + interfejs WWW). Automatyka BCD z radia, blokowanie przez PTT i OTRSP to
+funkcje **opcjonalne** (`#ifdef`, patrz „Funkcje opcjonalne") — domyślnie **wyłączone**.
+Wykrywanie kolizji między TRX działa zawsze.
 
 ## Platforma i budowanie
 
@@ -16,21 +18,22 @@ podczas PTT i sterowaniem ręcznym (enkoder/LCD/WWW) oraz automatycznym (BCD z r
   `nanoatmega328new` = nowy). Wgranie: `pio run -t upload`. Monitor: 9600 8N1.
   `LiquidCrystal` i `Ethernet2` (`adafruit/Ethernet2`, W5500) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
-- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno.
-  Domyślnie: **Ethernet WŁ., OTRSP WYŁ.** — po optymalizacji Flash **87,3%** / RAM **39,7%**.
-  `OTRSP_parse()` i `serialEvent()` są pod `#if defined(OTRSP)`. Włączenie OTRSP wymaga
-  wyłączenia `EthModule` (i odwrotnie).
-- **Optymalizacja rozmiaru — konwencje do zachowania:** `ant[]` i `glyphs[6][8]` są w `PROGMEM`
-  (nazwy anten czytaj przez `antName(idx)` → `__FlashStringHelper*`; glify przez `memcpy_P`);
-  `BCDmatrixOUT` w `PROGMEM` (czytaj `pgm_read_byte`); `port[8][6]` jest `byte`. Bloki WWW
-  (przyciski poz. 0–7) są w pętli — przy zmianie HTML pilnuj identycznych nazw pól `S{bank}{kod}`,
-  bo od nich zależy parsowanie `GET` (`HTTP_req.substring(7,8)`/`(8,10)`).
+- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
+  (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
+  WEB_ANT_NAMES WŁ.** — Flash **83,0%** / RAM **44,7%**. Build z wszystkim WŁ. (BCD+PTT):
+  ~87%. `OTRSP_parse()`/`serialEvent()` są pod `#if defined(OTRSP)`; włączenie OTRSP wymaga
+  wyłączenia `EthModule`.
+- **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
+  przez `memcpy_P`); `BCDmatrixOUT` w `PROGMEM` (`pgm_read_byte`, tylko przy `BCD_INPUT`);
+  `port[8][6]` jest `byte`; nazwy anten patrz „Funkcje opcjonalne". Bloki WWW (przyciski
+  poz. 0–7) są w pętli — przy zmianie HTML pilnuj nazw pól `S{bank}{kod}`, bo od nich zależy
+  parsowanie żądania.
 - **Serwer WWW (konwencje):** statyczny nagłówek+CSS jest w PROGMEM (`HTTP_HEAD`/`HTTP_HEAD2`)
   i wysyłany `sendP()` (chunki 64 B, `client.write`) — nie zamieniaj z powrotem na serie
-  `print(F())`. Parsowanie `GET` jest bez `String` — bank/kod czytane wprost z `reqBuf[16]`
-  (bank = `reqBuf[7]`, kod = `reqBuf[8..9]`), z walidacją cyfr i `bankIdx 0..Ports-1`. Serwer
-  czyta tylko pierwszą linię żądania i wtedy odpowiada (`if (c=='\n')`), potem
-  `delay(1); client.stop()`. Nie przywracaj globalnego `String HTTP_req`.
+  `print(F())`. Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
+  bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; przy `WEB_ANT_NAMES` też `N{k}={nazwa}` od `reqBuf[6]`),
+  z walidacją cyfr i `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą linię żądania i wtedy
+  odpowiada (`if (c=='\n')`), potem `delay(1); client.stop()`. Nie przywracaj `String HTTP_req`.
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino
@@ -65,27 +68,28 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 - **Model stanu**: tablica `port[8][6]` — wiersze 0–3 = wejścia TRX1–4, 4–7 = wyjścia.
   Kolumny: `{adres_I2C, wybrana_antena, PTT, kolizja, tryb_ręczny, część(bank)}`.
 - **Konfiguracja przez `#define`** na początku pliku: `Ports` (2 lub 4), `Inputs`,
-  `inputHigh`, `OTRSP`, `OTRSP_DEBUG`, `EthModule`, `__USE_DHCP__`, `SERBAUD`.
+  `inputHigh`, `SERBAUD`, `EthModule`, `__USE_DHCP__`, `OTRSP`/`OTRSP_DEBUG` oraz flagi funkcji
+  `WEB_ANT_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN` (patrz „Funkcje opcjonalne").
 - **I²C / MCP23017**: `0x20`/`0x22` = wyjścia, `0x21`/`0x23` = wejścia (patrz
   `docs/CONNECTIONS.md`). Rejestry GPIOA=0x12, GPIOB=0x13.
-- **Kluczowe funkcje**: `rx()` (odczyt BCD+PTT, dekodowanie `BCDmatrixOUT`),
-  `tx()` (one-hot na przekaźniki), `show()` (rysowanie linii LCD), `encI()`/`enc2()`
-  (enkoder na przerwaniu), `OTRSP_parse()` (SO2R po serialu).
-- **Nazwy anten**: tablica `ant[]` (indeks 0 = "OFF", ostatni = "M-off->BCD" — nie ruszać
-  tych dwóch skrajnych).
+- **Kluczowe funkcje**: `tx()` (one-hot na przekaźniki), `show()` (rysowanie linii LCD),
+  `encI()`/`enc2()` (enkoder na przerwaniu). Opcjonalnie: `rx()` (BCD+PTT, tylko `BCD_INPUT`),
+  `OTRSP_parse()` (SO2R, tylko `OTRSP`).
+- **Nazwy anten**: domyślne w `antDefault[]` PROGMEM (indeks 0 = "OFF", 8 = "M-off->BCD" —
+  nieedytowalne). Przy `WEB_ANT_NAMES` nazwy 1–7 są w `antRAM[]` (EEPROM), czytane przez
+  `antName()`.
 
 ## Modyfikacje SQ9FK — o czym pamiętać
 
 Zmiany są oznaczone komentarzami `//SQ9FK` w kodzie. Przy edycji zachowaj spójność między
 wszystkimi miejscami dotyczącymi danej zmiany:
 
-- **7. pozycja anteny** — dotyczy: `ant[]`, zakres enkodera (`enc2(..., 7+1, ...)`),
-  `tx()` (case 7 → `bit5`), interfejs WWW (przyciski „7"), warunki `==8` (dawniej `==7`)
-  w `show()` i `loop()`.
+- **7. pozycja anteny** — dotyczy: `antDefault[]`, zakres enkodera (`enc2`), `tx()`
+  (case 7 → `bit5`), interfejs WWW (przyciski „7"). Pozycja „8" (BCD) tylko przy `BCD_INPUT`.
 - **GXP11 poz. 4/5** — współdzielą fizyczny port; `bit7` = przekaźnik pasma 40 m. Blokada
   kolizji 4↔5 jest w `loop()` **oraz** w `OTRSP_parse()` — zmieniać w obu miejscach.
-- **Kontrola PTT wyłączona** — kilka wywołań `rx(..., 1, ...)` jest zakomentowanych.
-  Nie „naprawiać" ich bez potwierdzenia — to celowa decyzja.
+- **PTT** — traktowanie PTT (odczyt + blokada) jest pod `#define PTT_BLOCKING` i domyślnie
+  **wyłączone** (zmiana HW: gniazda PTT jako wyjścia). Nie włączaj bez potwierdzenia.
 
 ## Konwencje
 
@@ -96,5 +100,11 @@ wszystkimi miejscami dotyczącymi danej zmiany:
 
 ## Weryfikacja
 
-- Kompilacja: `pio run` (bez ostrzeżeń o brakujących prototypach/bibliotekach).
-- Brak realnego sprzętu w tym środowisku — testy funkcjonalne wykonuje użytkownik na stacji.
+- Kompilacja: `pio run` (bez ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki `Ethernet2`
+  są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
+  `#ifdef` nie uległy rozjechaniu.
+- **Wygląd interfejsu WWW** można podejrzeć bez sprzętu: `tools/websim.html` (symulator
+  odtwarzający HTML/CSS firmware) lub `python tools/serve.py`. Przy zmianie HTML strony
+  zaktualizuj też symulator.
+- Brak realnego sprzętu w tym środowisku — testy funkcjonalne (EEPROM, W5500) wykonuje
+  użytkownik na stacji.

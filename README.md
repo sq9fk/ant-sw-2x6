@@ -5,8 +5,10 @@ Firmware sterownika przełącznika antenowego **6 anten × 2 TRX** oparty na pro
 (oryginał **OK1HRA**, rev 0.3), zmodyfikowany przez **SQ9FK** na potrzeby stacji **SP9PDF**.
 
 Urządzenie pozwala dwóm transceiverom niezależnie i bezkolizyjnie korzystać ze wspólnego
-zestawu anten, z blokadą przełączania podczas nadawania (PTT) i ochroną przed konfliktem,
-gdy oba TRX żądają tej samej anteny.
+zestawu anten, z ochroną przed konfliktem, gdy oba TRX żądają tej samej anteny. Sterowanie
+odbywa się ręcznie (enkoder/LCD + interfejs WWW); automatyka BCD z radia oraz blokowanie
+przez PTT to funkcje **opcjonalne** (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)),
+domyślnie wyłączone.
 
 ## Sprzęt
 
@@ -15,7 +17,7 @@ gdy oba TRX żądają tej samej anteny.
 - Wyświetlacz: **LCD 16×2** (jedna linia na TRX)
 - Wejścia: enkoder obrotowy + podświetlany przycisk (menu ręczne)
 - Pomiar napięcia zasilania na `A3` (ostrzeżenia LOW/HIGH < 10 V / > 15 V)
-- Opcjonalny moduł Ethernet (interfejs WWW) — domyślnie wyłączony (`#define EthModule`)
+- Moduł Ethernet **W5500** (interfejs WWW) — w firmware **domyślnie włączony** (`#define EthModule`)
 
 Dokumentacja sprzętowa w repo:
 - Schemat (SVG): [`docs/6x2-antenna-switch-control-03-sch.svg`](docs/6x2-antenna-switch-control-03-sch.svg)
@@ -32,14 +34,17 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 
 - **7. pozycja anteny** — obsługa dodatkowej kombinacji wyjść (GXP11 ze sterowaniem
   zewnętrznym przekaźnikiem 40 m z pinu GPA7).
-- **Sterowanie OTRSP** (SO2R) po porcie szeregowym — komendy `AUX1`/`AUX2` oraz zapytania
-  `?AUX1`, `?AUX2`, `?NAME` (nazwa urządzenia: `2x6SP9PDFRemoteAntennaSwitch`).
-  Kompatybilne m.in. z N1MM+.
+- **Edycja nazw anten przez WWW** (`WEB_ANT_NAMES`) — nazwy 1–7 ustawiane na stronie,
+  zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
 - **Blokada kolizji między pozycjami 4 i 5** — GXP11 współdzieli tor, więc oba TRX nie mogą
-  jednocześnie wybrać 4 i 5.
-- **Wyłączona kontrola PTT** w torze RX/logice menu (patrz komentarze `//SQ9FK` w kodzie).
+  jednocześnie wybrać 4 i 5. (Wykrywanie kolizji ogólnie działa zawsze.)
+- **Sterowanie OTRSP** (SO2R) — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`
+  (`2x6SP9PDFRemoteAntennaSwitch`), zgodne m.in. z N1MM+. **Opcjonalne** (`OTRSP`), domyślnie
+  wyłączone — wyklucza się rozmiarowo z Ethernetem.
+- **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
+  domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania.
-- Interfejs WWW rozszerzony o 7. pozycję i etykietę „SP9PDF”.
+- Optymalizacja rozmiaru firmware (PROGMEM, pętle WWW) i utwardzenie serwera WWW.
 
 Domyślne nazwy anten są w `antDefault[]` na początku `src/main.ino`. Przy włączonym
 `WEB_ANT_NAMES` nazwy 1–7 są **edytowalne przez WWW** i zapisywane w EEPROM (patrz niżej).
