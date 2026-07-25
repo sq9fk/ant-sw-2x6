@@ -84,6 +84,9 @@ Domyślne nazwy anten są w `antDefault[]` na początku `src/main.ino`. Przy wł
 ├── hw/                            # projekt KiCad rev 03 (OK1HRA, CC BY-SA 4.0)
 │   ├── 6x2-antenna-switch-control-03.zip
 │   └── 6x2-antenna-switch-control-03/   # .sch, .kicad_pcb, .net, .lib, .pro
+├── tools/
+│   ├── websim.html                # symulator interfejsu WWW (test wyglądu bez sprzętu)
+│   └── serve.py                   # launcher: wystawia symulator i otwiera przeglądarkę
 ├── README.md
 ├── CLAUDE.md                      # wskazówki dla Claude Code
 └── LICENSE                        # GPLv3
@@ -141,6 +144,17 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > Uwaga (z oryginału): dla szybszego startu z DHCP zmień w `Dhcp.h`
 > `timeout = 60000` na `6000`.
+
+## Symulator interfejsu WWW
+
+Podgląd wyglądu strony urządzenia bez sprzętu — odtwarza HTML/CSS generowany przez firmware.
+
+```bash
+python tools/serve.py
+```
+
+Skrypt wystawia stronę lokalnie (domyślnie `http://127.0.0.1:8765/websim.html`) i otwiera ją
+w przeglądarce. Można też otworzyć plik [`tools/websim.html`](tools/websim.html) bez serwera.
 
 ## Licencja
 
