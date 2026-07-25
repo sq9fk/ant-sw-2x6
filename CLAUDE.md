@@ -65,6 +65,10 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 
 ## Architektura kodu (src/main.ino)
 
+> Pełny opis architektury: [`docs/DESIGN.md`](docs/DESIGN.md). Pinout/sprzęt:
+> [`docs/CONNECTIONS.md`](docs/CONNECTIONS.md).
+
+
 - **Model stanu**: tablica `port[8][6]` — wiersze 0–3 = wejścia TRX1–4, 4–7 = wyjścia.
   Kolumny: `{adres_I2C, wybrana_antena, PTT, kolizja, tryb_ręczny, część(bank)}`.
 - **Konfiguracja przez `#define`** na początku pliku: `Ports` (2 lub 4), `Inputs`,

@@ -24,6 +24,8 @@ Dokumentacja sprzętowa w repo:
 - Projekt **KiCad** rev 03 (schemat + PCB + netlista): [`hw/`](hw/)
 - **Analiza połączeń** (pinout MCU, I²C, przekaźniki, BCD/PTT, OTRSP), zweryfikowana
   netlistą: [`docs/CONNECTIONS.md`](docs/CONNECTIONS.md)
+- **Architektura firmware** (model stanu, pętla, serwer WWW, flagi funkcji):
+  [`docs/DESIGN.md`](docs/DESIGN.md)
 
 Źródło sprzętu: RemoteQTH / OK1HRA, licencja **CC BY-SA 4.0**
 (<https://remoteqth.com/6x2-antenna-controler.php>).
@@ -85,7 +87,8 @@ Domyślne nazwy anten są w `antDefault[]` na początku `src/main.ino`. Przy wł
 │   └── ant-sw-6x2-04.ino          #   wariant rev 04
 ├── docs/
 │   ├── 6x2-antenna-switch-control-03-sch.svg   # schemat (RemoteQTH rev 03)
-│   └── CONNECTIONS.md             # analiza połączeń (kod + netlista)
+│   ├── CONNECTIONS.md             # analiza połączeń (kod + netlista)
+│   └── DESIGN.md                  # architektura firmware (model stanu, WWW, flagi)
 ├── hw/                            # projekt KiCad rev 03 (OK1HRA, CC BY-SA 4.0)
 │   ├── 6x2-antenna-switch-control-03.zip
 │   └── 6x2-antenna-switch-control-03/   # .sch, .kicad_pcb, .net, .lib, .pro

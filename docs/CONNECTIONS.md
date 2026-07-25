@@ -9,6 +9,15 @@
 Płyta rev 03 to wersja **2-portowa (6 anten × 2 TRX)**: 1× Arduino Nano, 2× MCP23017,
 2× ULN/UDN (drivery), opcjonalny W5500 (Ethernet), LM2576 (zasilanie).
 
+> **⚠️ Sprzęt vs firmware.** Ten dokument opisuje **możliwości sprzętu** (płyta OK1HRA rev 03).
+> Domyślna konfiguracja firmware SQ9FK **nie używa** części z nich:
+> - **Ethernet WŁ.** (interfejs WWW), **OTRSP WYŁ.** (wyklucza się rozmiarowo z Ethernetem);
+> - wejścia **BCD** (`BCD_INPUT`) i **odczyt/blokada PTT** (`PTT_BLOCKING`) — **wyłączone**;
+> - na tej stacji gniazda **PTT przerobiono sprzętowo na wyjścia** (nie służą jako wejścia PTT).
+>
+> Sekcje 4 (BCD/PTT) i 6 (OTRSP) opisują więc funkcje **opcjonalne**. Wyjścia anten (sekcja 3),
+> I²C, LCD, enkoder, zasilanie i wykrywanie kolizji działają zawsze.
+
 ## 1. Mikrokontroler — Arduino Nano (ATmega328P) `U8`
 
 Nazwy sieci w schemacie odpowiadają 1:1 definicjom w firmware — **✓ netlista**:
@@ -28,8 +37,8 @@ Nazwy sieci w schemacie odpowiadają 1:1 definicjom w firmware — **✓ netlist
 | A3  | `/12V`    | Pomiar napięcia (dzielnik R3/R4) | `analogRead(A3)` |
 | A4  | `/SDA`    | I²C → `U5.13`, `U6.13` (pull-up R26) | `Wire` |
 | A5  | `/SCL`    | I²C → `U5.12`, `U6.12` (pull-up R25) | `Wire` |
-| D0/D1 | `/RX` `/TX` | Serial 9600 — OTRSP/SO2R | `Serial` |
-| D10–D13 | `Net-(U1-*)` | SPI → W5500 (`U1`) | `#define EthModule` |
+| D0/D1 | `/RX` `/TX` | Serial 9600 — OTRSP/SO2R (opcja, dom. wył.) | `#define OTRSP` |
+| D10–D13 | `Net-(U1-*)` | SPI → W5500 (`U1`) — dom. **wł.** | `#define EthModule` |
 | 3V3 | `+3V3`    | zasilanie W5500 | — |
 | A2, A6, A7, AREF | — | niepodłączone | — |
 
@@ -78,6 +87,12 @@ w firmware (`loop()` **i** `OTRSP_parse()`).
 
 ## 4. Wejścia BCD + PTT — ✓ netlista
 
+> **Funkcja opcjonalna — domyślnie nieaktywna.** Poniższa ścieżka wejściowa jest obsługiwana
+> przez firmware tylko przy `#define BCD_INPUT` (odczyt BCD) i `#define PTT_BLOCKING` (PTT) —
+> oba domyślnie **wyłączone**. `U6` (IN) nie jest wtedy czytany (`rx()` nie jest kompilowany),
+> a `port[i][1]` ustawia się wyłącznie ręcznie (WWW/enkoder). Na tej stacji gniazda PTT są
+> ponadto przerobione na **wyjścia** (zmiana HW poza tą netlistą).
+
 Dane pasma z radia wchodzą na złącza **P3/P4** (ferryt + R9–R16 + RC), do `U6` (IN):
 
 | Złącze | Piny | → U6 | Rola |
@@ -109,6 +124,9 @@ Tablica `BCDmatrixOUT[2][16]` mapuje 16 kodów pasma → numer anteny:
 | `J1/J2` `U1` | RJ45 / moduł | opcjonalny Ethernet W5500 (SPI, `#define EthModule`) |
 
 ## 6. Sterowanie z komputera — OTRSP (SO2R)
+
+> **Funkcja opcjonalna — domyślnie nieaktywna** (`#define OTRSP`). Wyklucza się rozmiarowo
+> z Ethernetem (30 KB flash), więc w domyślnym buildzie z WWW jest wyłączona.
 
 Port szeregowy Nano (D0/D1, 9600 8N1), obsługa w `OTRSP_parse()`:
 
