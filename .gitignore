@@ -21,6 +21,10 @@ build/
 *-bak
 _autosave-*
 
+# Python
+__pycache__/
+*.pyc
+
 # Editor / OS
 .vscode/
 .idea/
