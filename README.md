@@ -124,7 +124,8 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **95,8%** / 29418 B, RAM **45,4%** / 930 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> (Flash **95,4%** / 29292 B, RAM **46,0%** / 942 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> Wariant z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (po odchudzeniu CSS).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:
@@ -140,8 +141,13 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 ### Optymalizacje serwera WWW (zastosowane)
 
-- Statyczny nagłówek + CSS wysyłany z **PROGMEM** porcjami 64 B (`sendP()` → `client.write`)
-  zamiast ~30 `print()` — mniej zapisów do W5500 i **krótsza blokada `loop()`** (PTT/przełączanie).
+- **Buforowanie całego wyjścia (`BufP`)** — w Ethernet2 każde `write()` to osobny segment TCP z
+  busy-waitem na `SEND_OK`, a `print(F("..."))` wysyła **znak po znaku** (setki drobnych pakietów).
+  Klasa `BufP` zbiera znaki w RAM i oddaje do W5500 porcjami 128 B — cała strona idzie w kilkudziesięciu
+  `send()` zamiast tysiąca, **wielokrotnie szybciej** i z krótszą blokadą `loop()`. Statyczny HTML
+  (nagłówek/CSS/ikona) też przez ten bufor (`out.print`), na końcu `out.done()`.
+- **Batchowany odczyt żądania** — dostępne bajty czytane jednym `client.read(buf,len)` (`recv`)
+  zamiast po bajcie, koniec linii wykrywany `memchr` — mniej transakcji SPI na wejściu.
 - **Walidacja żądania** (kontrola zakresu banku) — obce żądania (`/favicon.ico`, gołe `GET /`)
   nie przełączają już anten i nie piszą poza tablicą `port[]` (usunięty ukryty błąd OOB).
 - Czytanie tylko pierwszej linii żądania (`GET …`) + usunięty debug `Serial.print` —

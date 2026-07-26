@@ -20,8 +20,8 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
   (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
-  WEB_ANT_NAMES WŁ.** — Flash **95,8%** / RAM **45,4%** (nowy wygląd WWW ze statusami/legendą).
-  Flash jest **prawie pełny** (~1,3 KB wolne) — build z BCD+PTT sięga **99,9%** (mieści się na styk).
+  WEB_ANT_NAMES WŁ.** — Flash **95,4%** / RAM **46,0%** (nowy wygląd WWW + buforowanie wyjścia).
+  Build z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (CSS odchudzony pod budżet).
   Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup). `OTRSP_parse()`/`serialEvent()` są pod
   `#if defined(OTRSP)`; włączenie OTRSP wymaga wyłączenia `EthModule`.
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
@@ -29,18 +29,22 @@ Wykrywanie kolizji między TRX działa zawsze.
   `port[8][6]` jest `byte`; nazwy anten patrz „Funkcje opcjonalne". Bloki WWW (przyciski
   poz. 0–7) są w pętli — przy zmianie HTML pilnuj nazw pól `S{bank}{kod}`, bo od nich zależy
   parsowanie żądania.
-- **Serwer WWW (konwencje):** statyczny nagłówek+CSS jest w PROGMEM (`HTTP_HEAD`/`HTTP_HEAD2`)
-  i wysyłany `sendP()` (chunki 64 B, `client.write`) — nie zamieniaj z powrotem na serie
-  `print(F())`. Ikona `POWER_SVG` (Flex) też z PROGMEM przez `sendP()`. **Układ strony** (ciemny teal,
-  wg [[project-rotator-wifi-bridge]]): topbar (`.brand`=nazwa stacji + kropka napięcia), karta
+- **Serwer WWW (konwencje):** **całe wyjście idzie przez bufor `BufP out(client)`** (`out.print`/
+  `out.println`, na końcu `out.done()`) — w Ethernet2 każde `write()` to osobny segment TCP z busy-waitem
+  na `SEND_OK`, a `print(F())` leci znak-po-znaku; `BufP` zbiera w RAM i wysyła porcjami 128 B. **Nie
+  wracaj do `client.print()` ani per-`send()`.** Statyczny nagłówek+CSS+ikona są w PROGMEM
+  (`HTTP_HEAD`/`HTTP_HEAD2`/`POWER_SVG`) i też lecą przez `out.print((const __FlashStringHelper*)…)`.
+  **Układ strony** (ciemny teal,
+  wg [[project-rotator-wifi-bridge]]): topbar (`.tb` = nazwa stacji + kropka napięcia), karta
   **Anteny** (nagłówek `.ahead` + statusy sekcji `.astat`/`.st` 50/50, wiersze `.trx` z przyciskami
   i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa stacji,
   nazwy anten, ukryte napięcie). **Flash prawie pełny — przy zmianach HTML/CSS pilnuj budżetu.**
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
   bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WEB_ANT_NAMES` też
   `N{k}={nazwa}` (antena) i `NS={nazwa}` (nazwa stacji) od `reqBuf[6]`), z walidacją cyfr i
-  `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą linię żądania i wtedy
-  odpowiada (`if (c=='\n')`), potem `delay(1); client.stop()`. Nie przywracaj `String HTTP_req`.
+  `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +
+  `memchr('\n')`), do końca pierwszej linii; potem odpowiedź, `out.done()`, `delay(1); client.stop()`.
+  Nie wracaj do czytania po bajcie ani `String HTTP_req`.
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
 - To sketch Arduino (`.ino`): funkcje mogą być użyte przed definicją (PlatformIO/Arduino

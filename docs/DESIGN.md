@@ -123,10 +123,11 @@ i kończy (`delay(1); client.stop()`).
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
 - *(opcja `WEB_ANT_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
 
-**Generowanie strony.** Statyczny nagłówek HTTP + `<head>` + CSS są w **PROGMEM**
-(`HTTP_HEAD`/`HTTP_HEAD2`) i wysyłane `sendP()` porcjami 64 B (`client.write`); ikona `POWER_SVG`
-(Flex) też z PROGMEM. Dynamicznie (w kontenerze `.wrap`, sekcje `.card`): **topbar** (kropka `.dot`
-czerwona przy napięciu poza 10–15 V + nazwa stacji `.brand`); karta **Anteny** — nagłówek `.ahead`
+**Generowanie strony.** **Całość idzie przez bufor wyjścia `BufP out(client)`** (patrz §9) — `out.print`/
+`out.println`, na końcu `out.done()`. Statyczny nagłówek HTTP + `<head>` + CSS + ikona `POWER_SVG` są
+w **PROGMEM** (`HTTP_HEAD`/`HTTP_HEAD2`/`POWER_SVG`) i lecą przez ten sam bufor. Dynamicznie (w
+kontenerze `.wrap`, sekcje `.card`): **topbar** (kropka `.dot`
+czerwona przy napięciu poza 10–15 V + nazwa stacji, `.tb`); karta **Anteny** — nagłówek `.ahead`
 ze **statusami sekcji** (`.astat`/`.st`, chipy 50/50: numer + nazwa włączonej anteny) oraz wiersze
 TRX `.trx` (przyciski anten w pętli, klasy `g`/`gr` = wybrana/kolizja; *(opcja)* Manual/BCD;
 *(opcja)* plakietka PTT; **ikona power Radio Flex** `.flx` na końcu wiersza, `F{s}{0|1}`); karta
@@ -160,12 +161,16 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 95,8 %** (29418 B) / **RAM 45,4 %** (930 B).
+Domyślny build: **Flash 95,4 %** (29292 B) / **RAM 46,0 %** (942 B). Build z wszystkim WŁ.
+(BCD+PTT+Ethernet): **99,4 %** — mieści się (CSS odchudzony pod budżet flash).
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
 - generowanie przycisków WWW i listy nazw w **pętli** (mniej powtórzonych łańcuchów `F()`);
-- **`sendP()`** — chunkowana wysyłka statycznego HTML z PROGMEM;
+- **`BufP`** — buforowanie **całego** wyjścia strony (RAM, porcje 128 B) zamiast per-znak `send()`
+  do W5500: kilkadziesiąt segmentów TCP zamiast tysiąca → **znacznie szybsze wyświetlanie** i krótsza
+  blokada `loop()`. Static (nagłówek/CSS/ikona) i dynamiczny HTML tym samym buforem;
+- **batchowany odczyt żądania** — `client.read(buf,len)` (`recv`) + `memchr('\n')` zamiast po bajcie;
 - parsowanie żądań **bez `String`** (bufor `char`), walidacja zakresu (brak zapisu poza `port[]`);
 - czytanie tylko pierwszej linii żądania.
 
@@ -175,7 +180,7 @@ BCD/PTT/OTRSP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 
 | Funkcja | Miejsca w kodzie |
 |---------|------------------|
-| `EthModule` | globalne (mac/ip/server, `HTTP_HEAD*`, `sendP`), sekcja serwera w `loop()`, `setup()` |
+| `EthModule` | globalne (mac/ip/server, `HTTP_HEAD*`, `POWER_SVG`, `BufP`), sekcja serwera w `loop()`, `setup()` |
 | `WEB_ANT_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
 | `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „8" w `show()`, cała funkcja `rx()` |
 | `PTT_BLOCKING` | warunki `if(port[i][2]==0)` w `loop()`, plakietka PTT w `show()` i WWW, odczyt PTT w `rx()` |
@@ -186,5 +191,6 @@ BCD/PTT/OTRSP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 ## 11. Weryfikacja
 
 - Kompilacja: `pio run -e nanoatmega328` (0 ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki
-  `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING`.
+  `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` (razem z
+  Ethernetem **99,4%** — mieści się, ale bez zapasu; nowe dodatki pilnuj pod budżet flash).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie) — na docelowej stacji (brak sprzętu w CI).

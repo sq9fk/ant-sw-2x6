@@ -106,8 +106,7 @@ function recalcErr(){
 // CSS urzadzenia - lustro HTTP_HEAD2 z firmware (paleta teal / akcent zolty, karty, Inter)
 const DEVICE_CSS =
   'body{margin:0;padding:0 0 1.5rem;min-width:290px;background:#12333b;color:#f7f7f7;font-family:Inter,Helvetica,Arial,sans-serif}\n'+
-  '.tb{display:flex;align-items:flex-start;flex-wrap:wrap;gap:.5rem .9rem;max-width:760px;margin:0 auto;padding:.9rem 1.2rem}\n'+
-  '.brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1.1rem;min-height:1.6rem}\n'+
+  '.tb{display:flex;align-items:center;gap:.55rem;max-width:760px;margin:0 auto;padding:.9rem 1.2rem;font-weight:800;font-size:1.1rem}\n'+
   '.dot{width:.6rem;height:.6rem;border-radius:50%;background:#06ac51;flex:0 0 auto}\n'+
   '.dot.bad{background:#d11534}\n'+
   /* naglowek karty Anteny: tytul + statusy sekcji (chipy 50/50 obok napisu) */
@@ -172,7 +171,7 @@ function buildDeviceHTML(){
   h += '<meta name="theme-color" content="#12333b">\r\n';
   h += '<style>\r\n'+DEVICE_CSS+'</style>\r\n</head>\r\n<body>\r\n';
   // topbar: kropka statusu (czerwona przy napieciu poza 10-15 V) + nazwa stacji
-  h += '<nav class="tb"><span class="brand"><span class="dot'+(bad?' bad':'')+'"></span>'+state.site.replace(/</g,'&lt;')+' '+state.inputs+'x'+P+' Antenna Switch</span></nav>\r\n';
+  h += '<nav class="tb"><span class="dot'+(bad?' bad':'')+'"></span>'+state.site.replace(/</g,'&lt;')+' '+state.inputs+'x'+P+' Antenna Switch</nav>\r\n';
   h += '<div class="wrap">\r\n';
   // karta: Anteny - tag TRX pokazuje NAZWE wlaczonej anteny (co jest wlaczone), na koncu
   // wiersza przycisk-ikona Radio Flex (GPA7/GPB7) bez tekstu (nazwa w title).
@@ -206,7 +205,6 @@ function buildDeviceHTML(){
   h += '</div></section>\r\n';
   // karta: Settings (zwijana <details>, domyslnie schowana) - nazwy + ukryty odczyt napiecia
   h += '<details class="card"><summary><h2>Settings</h2><span class="chev">&#9662;</span></summary>\r\n';
-  h += '<p class="dh">Nazwa stacji i nazwy anten (1-6) - zapisywane w EEPROM.</p>\r\n';
   h += '<div class="nm"><b>Nazwa</b><form method="get" style="display:inline"><input name="NS'+
        '" maxlength="11" size="12" value="'+state.site.replace(/"/g,'&quot;')+
        '"><input type="submit" value="OK"></form></div>\r\n';

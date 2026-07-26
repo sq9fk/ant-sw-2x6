@@ -210,8 +210,8 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "<style>\r\n"
     "body{margin:0;padding:0 0 1.5rem;min-width:290px;background:#12333b;color:#f7f7f7;"
       "font-family:Inter,Helvetica,Arial,sans-serif}\r\n"
-    ".tb{display:flex;align-items:center;gap:.55rem;max-width:760px;margin:0 auto;padding:.9rem 1.2rem}\r\n"
-    ".brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1.1rem}\r\n"
+    ".tb{display:flex;align-items:center;gap:.55rem;max-width:760px;margin:0 auto;"
+      "padding:.9rem 1.2rem;font-weight:800;font-size:1.1rem}\r\n"
     ".dot{width:.6rem;height:.6rem;border-radius:50%;background:#06ac51;flex:0 0 auto}\r\n"
     ".dot.bad{background:#d11534}\r\n"
     ".wrap{max-width:760px;margin:0 auto;padding:0 1rem;display:flex;flex-direction:column;gap:1rem}\r\n"
@@ -228,7 +228,6 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     ".sq.on{background:#f5d33c;color:#162f36}\r\n"
     ".trx{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;padding:.5rem 0;"
       "border-bottom:1px solid rgba(255,255,255,.07)}\r\n"
-    ".trx:last-of-type{border-bottom:none}\r\n"
     ".bcd,.bcdr{border-radius:.4em;padding:.4rem .7rem;margin-right:.35rem;min-width:5rem;"
       "font-weight:700;font-size:.9rem;display:inline-block}\r\n"
     ".bcd{background:#21505c}.bcdr{background:#d11534}\r\n"
@@ -242,8 +241,6 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
       "background:#2a5d6b;color:#a7b9be;padding:.4rem .55rem;cursor:pointer}\r\n"
     ".flx svg{width:15px;height:15px}\r\n"
     ".flx.on{background:#f5d33c;color:#162f36}\r\n"
-    ".ptt{border-radius:.4em;padding:.25rem .55rem;margin-left:.4rem;background:#d11534;"
-      "color:#f7f7f7;font-size:.78rem;font-weight:700}\r\n"
     ".leg{display:grid;grid-template-columns:repeat(auto-fit,minmax(12.5rem,1fr));gap:.5rem 1.1rem}\r\n"
     ".li{display:flex;align-items:center;gap:.6rem;font-size:.92rem}\r\n"
     ".li b{display:inline-flex;align-items:center;justify-content:center;min-width:1.6rem;height:1.6rem;"
@@ -252,12 +249,10 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "details.card summary::-webkit-details-marker{display:none}\r\n"
     "details.card summary h2{margin:0}\r\n"
     ".chev{color:#a7b9be}\r\n"
-    "details.card[open] summary{margin-bottom:.9rem}\r\n"
     ".nm{display:flex;align-items:center;gap:.5rem;margin:.4rem 0}\r\n"
     ".nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\r\n"
-    ".dh{color:#a7b9be;font-size:.8rem;margin:0 0 .8rem}\r\n"
-    ".rows .row{display:flex;justify-content:space-between;padding:.35rem 0}\r\n"
-    ".rows span{color:#a7b9be}strong.warn{color:#d11534}\r\n"
+    ".rows .row{display:flex;justify-content:space-between;padding:.5rem 0 0}\r\n"
+    ".rows span{color:#a7b9be}\r\n"
     "</style>\r\n</head>\r\n<body>\r\n";
 
   // SQ9FK: ikona power (wlacz/wylacz) dla przyciskow Flex - dziedziczy kolor (currentColor)
@@ -266,19 +261,23 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "stroke-linecap=\"round\"><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"12\"/>"
     "<path d=\"M6.4 7.3a8 8 0 1 0 11.2 0\"/></svg>";
 
-  // Wysyla lancuch z PROGMEM porcjami po 64 B (client.write zamiast setek print(char))
-  static void sendP(EthernetClient &cl, PGM_P p) {
-    char buf[64];
-    for (;;) {
-      byte n = 0;
-      while (n < sizeof(buf)) {
-        char ch = pgm_read_byte(p++);
-        if (ch == 0) { if (n) cl.write((const uint8_t*)buf, n); return; }
-        buf[n++] = ch;
+  // SQ9FK: bufor wyjscia strony. W Ethernet2 kazde send() to osobny segment TCP + busy-wait na
+  // SEND_OK, a out.print(F("...")) wysyla ZNAK PO ZNAKU -> setki drobnych pakietow = wolno.
+  // BufP zbiera znaki w RAM i oddaje je do W5500 porcjami 64 B (kilkadziesiat send() zamiast tysiecy).
+  // Cala strona idzie przez `out` (print/println), na koncu out.done() domyka bufor.
+  class BufP : public Print {
+      EthernetClient &cl;
+      uint8_t buf[128];   // wiekszy bufor = mniej segmentow TCP (na stosie, RAM ma zapas)
+      uint8_t n;
+    public:
+      BufP(EthernetClient &c) : cl(c), n(0) {}
+      size_t write(uint8_t b) {
+        buf[n++] = b;
+        if (n >= sizeof(buf)) { cl.write(buf, n); n = 0; }
+        return 1;
       }
-      cl.write((const uint8_t*)buf, n);
-    }
-  }
+      void done() { if (n) { cl.write(buf, n); n = 0; } }
+  };
 #endif
 #if defined(BCD_INPUT)
 const byte BCDmatrixOUT[2][16] PROGMEM = {
@@ -480,38 +479,41 @@ void loop() {
     // SQ9FK (#4): czytamy tylko pierwsza linie zadania (GET ...) i od razu odpowiadamy
     // -> mniej odczytow i krotsza blokada loop() (switching/PTT).
     while (client.connected()) {
-      if (client.available()) {
-        char c = client.read();
-        if (reqLen < sizeof(reqBuf) - 1) {
-          reqBuf[reqLen++] = c;
-        }
-        if (c == '\n') {                // koniec linii zadania -> generuj odpowiedz
-          reqBuf[reqLen] = '\0';
-          // ---- naglowek HTTP + <head> + CSS: statyczne, z PROGMEM jednym sendP() (#1) ----
-          sendP(client, HTTP_HEAD);
-          client.print(F("<title>"));
-          client.print(Inputs);
-          client.print(F("x"));
-          client.print(Ports);
-          client.print(F(" "));
-          client.print(siteName());
-          client.println(F(" - Antenna switch</title>"));
-          client.print(F("<meta http-equiv=\"refresh\" content=\"10;url=http://"));
-          client.print(Ethernet.localIP());
-          client.println(F("\">"));
-          sendP(client, HTTP_HEAD2);
+      int avail = client.available();
+      if (avail > 0) {
+        // SQ9FK: czytaj dostepne bajty jednym recv (zamiast po bajcie -> mniej transakcji SPI)
+        int room = (int)sizeof(reqBuf) - 1 - reqLen;
+        if (avail > room) avail = room;
+        if (avail > 0) reqLen += client.read((uint8_t*)reqBuf + reqLen, avail);
+        reqBuf[reqLen] = '\0';
+        if (memchr(reqBuf, '\n', reqLen) || reqLen >= (int)sizeof(reqBuf) - 1) {
+          // koniec linii zadania (lub pelny bufor) -> generuj odpowiedz
+          BufP out(client);   // SQ9FK: cala strona przez bufor (mniej segmentow TCP = szybciej)
+          // ---- naglowek HTTP + <head> + CSS: statyczne, z PROGMEM (przez bufor) ----
+          out.print((const __FlashStringHelper*)HTTP_HEAD);
+          out.print(F("<title>"));
+          out.print(Inputs);
+          out.print(F("x"));
+          out.print(Ports);
+          out.print(F(" "));
+          out.print(siteName());
+          out.println(F(" - Antenna switch</title>"));
+          out.print(F("<meta http-equiv=\"refresh\" content=\"10;url=http://"));
+          out.print(Ethernet.localIP());
+          out.println(F("\">"));
+          out.print((const __FlashStringHelper*)HTTP_HEAD2);
           // SQ9FK: topbar - kropka statusu (czerwona gdy napiecie poza 10-15 V) + nazwa stacji
           float vv = volt(analogRead(A3));
-          client.print(F("<nav class=\"tb\"><span class=\"brand\"><span class=\"dot"));
-          if (vv < 10 || vv > 15) client.print(F(" bad"));
-          client.print(F("\"></span>"));
-          client.print(siteName());
-          client.print(F(" "));
-          client.print(Inputs);
-          client.print(F("x"));
-          client.print(Ports);
-          client.println(F(" Antenna Switch</span></nav>"));
-          client.println(F("<div class=\"wrap\">"));
+          out.print(F("<nav class=\"tb\"><span class=\"dot"));
+          if (vv < 10 || vv > 15) out.print(F(" bad"));
+          out.print(F("\"></span>"));
+          out.print(siteName());
+          out.print(F(" "));
+          out.print(Inputs);
+          out.print(F("x"));
+          out.print(Ports);
+          out.println(F(" Antenna Switch</nav>"));
+          out.println(F("<div class=\"wrap\">"));
           // SQ9FK (#5): parsuj prosto z bufora. Zadania:
           //   /?S{bank}{kod}   - wybor anteny / tryb (00..06, 20/21)
           //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WEB_ANT_NAMES)
@@ -553,137 +555,135 @@ void loop() {
           }
 
           // SQ9FK: naglowek karty Anteny + statusy sekcji (chipy 50/50: numer + nazwa wl. anteny)
-          client.print(F("<section class=\"card\"><div class=\"ahead\"><h2>Anteny</h2><div class=\"astat\">"));
+          out.print(F("<section class=\"card\"><div class=\"ahead\"><h2>Anteny</h2><div class=\"astat\">"));
           for (i = 0; i < Ports; i++) {
-              client.print(F("<span class=\"st\"><span class=\"sq"));
-              if (port[i][1]) client.print(F(" on"));
-              client.print(F("\">"));
-              client.print(i+1);
-              client.print(F("</span><span class=\"an\">"));
-              client.print(antName(port[i][1]));
-              client.print(F("</span></span>"));
+              out.print(F("<span class=\"st\"><span class=\"sq"));
+              if (port[i][1]) out.print(F(" on"));
+              out.print(F("\">"));
+              out.print(i+1);
+              out.print(F("</span><span class=\"an\">"));
+              out.print(antName(port[i][1]));
+              out.print(F("</span></span>"));
           }
-          client.println(F("</div></div><form method=\"get\">"));
+          out.println(F("</div></div><form method=\"get\">"));
           for (i = 0; i < Ports; i++) {
-              client.print(F("<div class=\"trx\"><span class=\"bcd"));
+              out.print(F("<div class=\"trx\"><span class=\"bcd"));
               if (port[i][3] == 1) {
-                client.print(F("r"));
+                out.print(F("r"));
               }
-              client.print(F("\">TRX"));
-              client.print(i+1);
-              client.print(F(" &#10148; "));
-              client.print(port[i][1]);
-              client.print(F("</span>"));
+              out.print(F("\">TRX"));
+              out.print(i+1);
+              out.print(F(" &#10148; "));
+              out.print(port[i][1]);
+              out.print(F("</span>"));
 #if defined(BCD_INPUT)
               if (port[i][4] == 0) {
-                client.print(F("<input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("21\" value=\"Manual\"> "));
+                out.print(F("<input type=\"submit\" name=\"S"));
+                out.print(i+1);
+                out.print(F("21\" value=\"Manual\"> "));
               } else {
 #endif
                 //SQ9FK: pozycje 0..6 generowane w petli (6 anten; oszczednosc flash)
                 for (byte pos = 0; pos <= 6; pos++) {
                   if (pos == 0) {
-                    client.print(F("<input type=\"submit\" name=\"S"));
+                    out.print(F("<input type=\"submit\" name=\"S"));
                   } else {
-                    client.print(F("\"><input type=\"submit\" name=\"S"));
+                    out.print(F("\"><input type=\"submit\" name=\"S"));
                   }
-                  client.print(i+1);
-                  client.print(F("0"));
-                  client.print(pos);
-                  client.print(F("\" value=\""));
+                  out.print(i+1);
+                  out.print(F("0"));
+                  out.print(pos);
+                  out.print(F("\" value=\""));
                   if (pos == 0) {
-                    client.print(F("-"));
+                    out.print(F("-"));
                   } else {
-                    client.print(pos);
+                    out.print(pos);
                   }
-                  client.print(F("\" class=\""));
+                  out.print(F("\" class=\""));
                   if (port[i][1] == pos) {
-                    client.print(F("g"));
+                    out.print(F("g"));
                     if (port[i][3] == 1) {
-                      client.print(F("r"));
+                      out.print(F("r"));
                     }
                   }
                 }
 #if defined(BCD_INPUT)
-                client.print(F("\"><input type=\"submit\" name=\"S"));
-                client.print(i+1);
-                client.print(F("20\" value=\"BCD-"));
-                client.print(i+1);
-                client.println(F("\"> "));
+                out.print(F("\"><input type=\"submit\" name=\"S"));
+                out.print(i+1);
+                out.print(F("20\" value=\"BCD-"));
+                out.print(i+1);
+                out.println(F("\"> "));
               }
 #else
-                client.println(F("\"> "));   // zamknij ostatni przycisk (bez przelacznika BCD)
+                out.println(F("\"> "));   // zamknij ostatni przycisk (bez przelacznika BCD)
 #endif
 #if defined(PTT_BLOCKING)
               if (port[i][2] == 1) {
-                client.print(F("<span class=\"ptt\">PTT</span>"));
+                out.print(F("<span class=\"ptt\">PTT</span>"));
               }
 #endif
               // SQ9FK: ikona Radio Flex tego TRX (tylko TRX1/2 = GPA7/GPB7); klik przelacza F{s}{new}
               if (i < 2) {
-                client.print(F("<button type=\"submit\" class=\"flx"));
-                if (flexState[i]) client.print(F(" on"));
-                client.print(F("\" name=\"F"));
-                client.print(i+1);
-                client.print(flexState[i] ? 0 : 1);
-                client.print(F("\" title=\"Radio Flex TRX"));
-                client.print(i+1);
-                client.print(F("\">"));
-                sendP(client, POWER_SVG);
-                client.print(F("</button>"));
+                out.print(F("<button type=\"submit\" class=\"flx"));
+                if (flexState[i]) out.print(F(" on"));
+                out.print(F("\" name=\"F"));
+                out.print(i+1);
+                out.print(flexState[i] ? 0 : 1);
+                out.print(F("\" title=\"Radio Flex TRX"));
+                out.print(i+1);
+                out.print(F("\">"));
+                out.print((const __FlashStringHelper*)POWER_SVG);
+                out.print(F("</button>"));
               }
-              client.print(F("</div>"));
+              out.print(F("</div>"));
           }
-          client.println(F("</form></section>"));
+          out.println(F("</form></section>"));
           // SQ9FK: Opis anten - legenda tylko do odczytu (widac co jest pod numerem)
-          client.println(F("<section class=\"card\"><h2>Opis anten</h2><div class=\"leg\">"));
+          out.println(F("<section class=\"card\"><h2>Opis anten</h2><div class=\"leg\">"));
           for (byte k = 1; k <= 6; k++) {
-            client.print(F("<div class=\"li\"><b>"));
-            client.print(k);
-            client.print(F("</b>"));
-            client.print(antName(k));
-            client.println(F("</div>"));
+            out.print(F("<div class=\"li\"><b>"));
+            out.print(k);
+            out.print(F("</b>"));
+            out.print(antName(k));
+            out.println(F("</div>"));
           }
-          client.println(F("</div></section>"));
+          out.println(F("</div></section>"));
           // SQ9FK: Settings (zwijane <details>) - nazwa stacji + nazwy anten + ukryte napiecie
-          client.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
+          out.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
 #if defined(WEB_ANT_NAMES)
-          client.println(F("<p class=\"dh\">Nazwa stacji i anten - zapis w EEPROM.</p>"));
           // SQ9FK: nazwa stacji -> /?NS={nazwa}
-          client.print(F("<div class=\"nm\"><b>Nazwa</b><form method=\"get\" style=\"display:inline\">"
+          out.print(F("<div class=\"nm\"><b>Nazwa</b><form method=\"get\" style=\"display:inline\">"
                          "<input name=\"NS\" maxlength=\"11\" size=\"12\" value=\""));
-          client.print(siteName());
-          client.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+          out.print(siteName());
+          out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
           // SQ9FK: edycja nazw anten (1..6) -> /?N{k}={nazwa}
           for (byte k = 1; k <= 6; k++) {
-            client.print(F("<div class=\"nm\"><b>"));
-            client.print(k);
-            client.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
-            client.print(k);
-            client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
-            client.print(antName(k));
-            client.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+            out.print(F("<div class=\"nm\"><b>"));
+            out.print(k);
+            out.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
+            out.print(k);
+            out.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
+            out.print(antName(k));
+            out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
           }
 #else
-          client.print(F("<div class=\"nm\"><b>Nazwa</b>"));
-          client.println(siteName());
-          client.println(F("</div>"));
+          out.print(F("<div class=\"nm\"><b>Nazwa</b>"));
+          out.println(siteName());
+          out.println(F("</div>"));
           for (byte k = 1; k <= 6; k++) {
-            client.print(F("<div class=\"nm\"><b>"));
-            client.print(k);
-            client.print(F("</b>"));
-            client.println(antName(k));
-            client.println(F("</div>"));
+            out.print(F("<div class=\"nm\"><b>"));
+            out.print(k);
+            out.print(F("</b>"));
+            out.println(antName(k));
+            out.println(F("</div>"));
           }
 #endif
-          // SQ9FK: ukryty (w zwinietym Settings) odczyt napiecia zasilania
-          client.print(F("<div class=\"rows\"><div class=\"row\"><span>Napi&#281;cie zasilania</span><strong"));
-          if (vv < 10 || vv > 15) client.print(F(" class=\"warn\""));
-          client.print(F(">"));
-          client.print(vv);
-          client.println(F("V</strong></div></div>"));
-          client.println(F("</details></div></body></html>"));
+          // SQ9FK: ukryty (w zwinietym Settings) odczyt napiecia zasilania (ostrzezenie = czerwona kropka w topbarze)
+          out.print(F("<div class=\"rows\"><div class=\"row\"><span>Napi&#281;cie zasilania</span><strong>"));
+          out.print(vv);
+          out.println(F("V</strong></div></div>"));
+          out.println(F("</details></div></body></html>"));
+          out.done();   // SQ9FK: wyslij reszte bufora
 
           break;
         }
