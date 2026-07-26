@@ -65,25 +65,27 @@ trafiają przez ferryty na gniazda **RJ45**:
 |-----------------|--------|--------|---------|
 | TRX1 anteny 1–6 | `GPA0..GPA5` | `U7` (ULN) | **RJ45 `J2`** (przez L29/L31/L35/L39/L43/L47) |
 | TRX2 anteny 1–6 | `GPB0..GPB5` | `U4` (ULN) | **RJ45 `J1`** (przez L5/L7/L11/L15/L19/L23) |
-| TRX1 pasmo GXP  | `GPA7` → R2 → `Q1` | przekaźnik `K1` | styki na **`J7`** |
-| TRX2 pasmo GXP  | `GPB7` → R1 → `Q2` | przekaźnik `K2` | styki na **`J6`** |
+| **Radio Flex 1** | `GPA7` → R2 → `Q1` | przekaźnik `K1` | styki na **`J7`** |
+| **Radio Flex 2** | `GPB7` → R1 → `Q2` | przekaźnik `K2` | styki na **`J6`** |
 | (nieużywane)    | `GPA6`, `GPB6` | — | — (firmware `bit6` wolny) |
 
-Kodowanie one-hot z funkcji `tx()` (numer anteny → bit portu):
+Kodowanie one-hot z funkcji `tx()` (numer anteny → bit portu) — **projekt 6-antenowy**:
 
 | Poz. | Antena | Bit | Uwaga |
 |------|--------|-----|-------|
 | 1 | 160m INV-V   | `bit0` | |
 | 2 | 80m Dipole   | `bit1` | |
 | 3 | Delta 80/40  | `bit2` | |
-| 4 | GXP11 40     | `bit3` + `bit7` | `bit7`→K1/K2 = przekaźnik pasma 40 m |
-| 5 | GXP11 20/10  | `bit3` (bit7=0) | ten sam port fizyczny co poz. 4 |
-| 6 | UB50         | `bit4` | |
-| 7 | 6m 5el Yagi  | `bit5` | mod SQ9FK |
-| 0/8 | OFF/BCD     | `0x00` | |
+| 4 | (nazwa WWW)  | `bit3` | niezależna antena |
+| 5 | (nazwa WWW)  | `bit4` | niezależna antena |
+| 6 | UB50         | `bit5` | |
+| 0 | OFF          | `0x00` | |
 
-Pozycje 4 i 5 współdzielą fizyczne wyjście (antena GXP11) — stąd blokada kolizji 4↔5
-w firmware (`loop()` **i** `OTRSP_parse()`).
+> **SQ9FK (zmiana):** `bit7` (GPA7/GPB7) **nie należy już do anteny** — steruje dwoma
+> **niezależnymi wyjściami Radio Flex** (`flexState[]`), przełączanymi osobnymi przyciskami WWW,
+> niezależnie od wyboru anteny. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
+> Poz. 4 i 5 to teraz **niezależne anteny** (`bit3`/`bit4`), więc blokada kolizji 4↔5 została
+> usunięta — pozostaje ogólne wykrywanie kolizji (ta sama antena na obu TRX).
 
 ## 4. Wejścia BCD + PTT — ✓ netlista
 

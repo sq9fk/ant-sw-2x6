@@ -49,7 +49,7 @@ Kolumny:
 | idx | nazwa | znaczenie |
 |-----|-------|-----------|
 | `[0]` | adres | adres I²C ekspandera MCP23017 |
-| `[1]` | antena | wybrana/żądana antena: `0`=OFF, `1..7`, `8`=BCD (tylko `BCD_INPUT`) |
+| `[1]` | antena | wybrana/żądana antena: `0`=OFF, `1..6`, `8`=BCD (tylko `BCD_INPUT`) |
 | `[2]` | PTT | stan PTT (tylko `PTT_BLOCKING`) |
 | `[3]` | kolizja | 1 = konflikt z drugim TRX |
 | `[4]` | tryb | 0=auto/BCD, 1=ręczny (istotne tylko przy `BCD_INPUT`) |
@@ -66,7 +66,7 @@ Kolejność w każdej iteracji:
 2. **GPIO / logika przełączania** — dla każdego TRX `i`:
    - *(opcja `BCD_INPUT`)* jeśli tryb auto → `rx()` czyta antenę z BCD radia;
    - **wykrywanie kolizji**: licznik `c` porównuje `port[i][1]` (żądanie) z `port[j+4][1]`
-     (wyjście innego TRX). Kolizja gdy ta sama antena (≠0) **lub** para 4↔5 (GXP współdzieli tor);
+     (wyjście innego TRX). Kolizja gdy ta sama antena (≠0). (Blokada 4↔5 GXP usunięta — 6 anten.);
    - jeśli kolizja → `port[i][3]=1`, wyjście OFF; inaczej → wyjście = żądanie
      *(przy `PTT_BLOCKING` przełączenie wstrzymane, gdy PTT aktywne)*;
    - `tx()` wystawia wyjścia na ekspander OUT.
@@ -77,27 +77,31 @@ Kolejność w każdej iteracji:
 
 ## 5. Wyjścia anten — `tx()`
 
-Numer anteny kodowany **one-hot** na porcie ekspandera OUT (`GPIOA`=TRX1, `GPIOB`=TRX2):
+Numer anteny kodowany **one-hot** na porcie ekspandera OUT (`GPIOA`=TRX1, `GPIOB`=TRX2) —
+**projekt 6-antenowy** (`bit0..bit5` = anteny 1..6):
 
-| Antena | Bit(y) |
-|--------|--------|
+| Antena | Bit |
+|--------|-----|
 | 1 | `bit0` |
 | 2 | `bit1` |
 | 3 | `bit2` |
-| 4 (GXP11 40) | `bit3` + `bit7` (przekaźnik pasma 40 m) |
-| 5 (GXP11 20/10) | `bit3` (bit7=0) |
-| 6 | `bit4` |
-| 7 | `bit5` |
-| 0/8 (OFF) | `0x00` |
+| 4 | `bit3` |
+| 5 | `bit4` |
+| 6 | `bit5` |
+| 0 (OFF) | `0x00` |
 
-`bit7` steruje zewnętrznym przekaźnikiem pasmowym GXP11 (mod SQ9FK — dawniej wyjście PTT).
-`bit6` nieużywany. Pozycje 4 i 5 to ta sama fizyczna antena → blokada kolizji 4↔5.
+**`bit7` = Radio Flex (SQ9FK):** `GPA7`/`GPB7` sterują dwoma **niezależnymi wyjściami Radio Flex**
+(`flexState[0]`/`flexState[1]` → Q1/K1/J7 i Q2/K2/J6), nakładanymi na bajt one-hot **niezależnie od
+wyboru anteny**. Przełączane osobnymi przyciskami WWW (`/?F{s}{0|1}`), z konfigurowalnymi nazwami
+(`/?NF{s}=...`, EEPROM). Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
+`bit6` nieużywany. Poz. 4 i 5 to teraz niezależne anteny → **blokada kolizji 4↔5 usunięta**
+(ogólne wykrywanie kolizji między TRX pozostaje).
 
 ## 6. Wybór anteny — źródła
 
 - **Enkoder/LCD:** przerwanie `encI()` + `enc2()`; `menu1state` przełącza między wyborem
-  linii a zmianą numeru anteny. Zakres 0..7 (0..8 przy `BCD_INPUT`).
-- **WWW:** żądanie `GET /?S{bank}{kod}` (patrz §7).
+  linii a zmianą numeru anteny. Zakres 0..6 (0..8 przy `BCD_INPUT`).
+- **WWW:** żądanie `GET /?S{bank}{kod}` (antena), `GET /?F{s}{0|1}` (Radio Flex) (patrz §7).
 - **(opcja) BCD:** `rx()` czyta 4-bit BCD z ekspandera IN, dekoduje przez `BCDmatrixOUT[2][16]`
   (PROGMEM) → numer anteny.
 - **(opcja) OTRSP:** `AUX1n`/`AUX2n` ustawiają antenę TRX1/TRX2; `?AUX1/?AUX2/?NAME/?` — zapytania.
@@ -112,10 +116,13 @@ i kończy (`delay(1); client.stop()`).
 
 **Parsowanie** (z `reqBuf`, indeksy liczone od początku linii):
 - `S{bank}{kod}` — `bank`=`reqBuf[7]`, `kod`=`reqBuf[8..9]`:
-  `00..07`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
+  `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
-- *(opcja `WEB_ANT_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..7); `parseAntName()` dekoduje
+- `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
+- *(opcja `WEB_ANT_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
+- *(opcja `WEB_ANT_NAMES`)* `NF{s}={nazwa}` — nazwa wyjścia Radio Flex `s`=1/2 → `flexRAM[s-1]`
+  (`parseName()` + `saveAntNames()`).
 
 **Generowanie strony.** Statyczny nagłówek HTTP + `<head>` + CSS są w **PROGMEM**
 (`HTTP_HEAD`/`HTTP_HEAD2`) i wysyłane `sendP()` porcjami 64 B (`client.write`) — mniej zapisów
@@ -128,16 +135,21 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 8. Nazwy anten i EEPROM
 
-- Domyślne nazwy: `antDefault[]` w PROGMEM (indeks 0=`OFF`, 8=`M-off->BCD` — nieedytowalne).
-- Przy `WEB_ANT_NAMES`: nazwy 1–7 w RAM `antRAM[9][ANT_MAXLEN+1]`, ładowane w `setup()` przez
-  `loadAntNames()` z EEPROM (bajt-magic `0xA5` + 7×`ANT_MAXLEN`), z fallbackiem na domyślne.
+- Domyślne nazwy: `antDefault[]` w PROGMEM (indeks 0=`OFF`, 8=`M-off->BCD` — nieedytowalne);
+  nazwy Radio Flex: `flexDefault[]` (`"Flex TRX1"`, `"Flex TRX2"`).
+- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz nazwy Flex 1–2 w
+  `flexRAM[2][ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
   Zapis `saveAntNames()` używa `EEPROM.update` (mniejsze zużycie komórek).
-- Odczyt zawsze przez `antName(idx)` — zwraca `char*` (RAM) lub `__FlashStringHelper*` (PROGMEM)
-  zależnie od flagi; oba typy obsługują `client.print()` i przypisanie do `String`.
+- **Układ EEPROM (SQ9FK):** bajt `0` = magic `0xA5` (sekcja anten) + 6×`ANT_MAXLEN` (offset `1`);
+  bajt `67` = **osobny magic `0x5A`** (sekcja Flex) + 2×`ANT_MAXLEN` (nazwy Flex, offset `68`, `79`).
+  Osobny magic Flex sprawia, że po wgraniu na istniejący EEPROM (magic `0xA5`) nazwy anten 1–6
+  **zostają**, a nazwy Flex startują z domyślnych (bez śmieci ze starej 7. nazwy).
+- Odczyt zawsze przez `antName(idx)` / `flexName(n)` — zwraca `char*` (RAM) lub
+  `__FlashStringHelper*` (PROGMEM) zależnie od flagi; oba typy obsługują `client.print()` i `String`.
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 83,0 %** (25512 B) / **RAM 44,7 %** (916 B).
+Domyślny build: **Flash 86,2 %** (26486 B) / **RAM 46,0 %** (942 B).
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;

@@ -60,10 +60,10 @@
     <div class="row">
       <button class="btn" id="reset">Reset stanu</button>
     </div>
-    <p class="hint">Klikaj przyciski anten i pola nazw bezpośrednio na podglądzie po prawej —
-      działają jak na urządzeniu. Nazwy mają limit 11 znaków (jak w firmware). Kolizję zobaczysz
-      wybierając tę samą antenę (albo parę 4/5) na obu TRX. Symulator pomija auto-odświeżanie
-      i popup „split".</p>
+    <p class="hint">Klikaj przyciski anten, przyciski <b>Flex</b> i pola nazw bezpośrednio na
+      podglądzie po prawej — działają jak na urządzeniu. Nazwy mają limit 11 znaków (jak w
+      firmware). Kolizję zobaczysz wybierając tę samą antenę na obu TRX. Przyciski Flex
+      (GPA7/GPB7) są niezależne od wyboru anteny. Symulator pomija auto-odświeżanie i popup „split".</p>
   </section>
 
   <section class="panel preview">
@@ -78,26 +78,26 @@
 
 <script>
 const ANT_DEFAULT = ["OFF","160m INV-V","80m Dipole","Delta 80/40","GXP11 40",
-                     "GXP11 20/10","UB50","6m 5el Yagi","M-off->BCD"];
+                     "GXP11 20/10","UB50","OFF","M-off->BCD"];
+const FLEX_DEFAULT = ["Flex TRX1","Flex TRX2"];   // GPA7 (K1/J7), GPB7 (K2/J6)
 const ANT_MAXLEN = 11;
 const state = {
   inputs: 6, ports: 2, volt: "13.8",
   ant: ANT_DEFAULT.slice(),
+  flex: FLEX_DEFAULT.slice(),      // edytowalne nazwy dwoch wyjsc Flex
+  flexOn: [0,0],                   // stan dwoch wyjsc Flex (GPA7/GPB7)
   port: []                        // per-TRX: {sel, err}
 };
 function initPorts(){ state.port = []; for (let i=0;i<4;i++) state.port.push({sel:0, err:0}); }
 initPorts();
 
-// Kolizja: dwa TRX zadaja tej samej anteny (!=0) albo pary 4<->5 (GXP wspoldzieli tor).
+// Kolizja: dwa TRX zadaja tej samej anteny (!=0). Blokada 4<->5 usunieta (6 niezaleznych anten).
 function recalcErr(){
   for (let i=0;i<state.ports;i++){
     let c=0; const si=state.port[i].sel;
     for (let j=0;j<state.ports;j++){
       if (i===j) continue;
-      const sj=state.port[j].sel;
-      if (si!==0 && si===sj) c++;
-      else if (si===4 && sj===5) c++;
-      else if (si===5 && sj===4) c++;
+      if (si!==0 && si===state.port[j].sel) c++;
     }
     state.port[i].err = c>0 ? 1 : 0;
   }
@@ -130,7 +130,7 @@ function buildDeviceHTML(){
   for (let i=0;i<P;i++){
     const p=state.port[i];
     h += '<span class="bcd'+(p.err?'r':'')+'">TRX'+(i+1)+' &#10148; '+p.sel+'</span>';
-    for (let pos=0;pos<=7;pos++){
+    for (let pos=0;pos<=6;pos++){                 // SQ9FK: 6 anten (bylo 7)
       h += (pos===0 ? '<input type="submit" name="S' : '"><input type="submit" name="S');
       h += (i+1); h += '0'+pos;
       h += '" value="'+(pos===0?'-':pos)+'" class="';
@@ -140,23 +140,42 @@ function buildDeviceHTML(){
     h += '<br>';
   }
   h += '\r\n</form>\r\n';
+  // SQ9FK: dwa niezalezne wyjscia Radio Flex (GPA7=1/K1/J7, GPB7=2/K2/J6). Klik przelacza.
+  h += '<form method="get">';
+  for (let fs=0;fs<2;fs++){
+    h += '<input type="submit" name="F'+(fs+1)+(state.flexOn[fs]?0:1)+
+         '" value="'+state.flex[fs].replace(/"/g,'&quot;')+(state.flexOn[fs]?' [ON]':' [OFF]')+
+         '" class="'+(state.flexOn[fs]?'g':'')+'"> ';
+  }
+  h += '</form>\r\n';
   h += '<br><a href="." onclick="return false;">split&#8599;</a>\r\n';
   h += '<br><p><b>Antennas:</b><br>\r\n';
-  for (let k=1;k<=7;k++){
+  for (let k=1;k<=6;k++){                         // SQ9FK: 6 anten
     h += '<form method="get" style="display:inline"><b>'+k+'</b> <input name="N'+k+
          '" maxlength="11" size="12" value="'+ant[k].replace(/"/g,'&quot;')+
+         '"><input type="submit" value="OK"></form><br>\r\n';
+  }
+  for (let fs=0;fs<2;fs++){                        // SQ9FK: nazwy dwoch wyjsc Flex
+    h += '<form method="get" style="display:inline"><b>Flex'+(fs+1)+'</b> <input name="NF'+(fs+1)+
+         '" maxlength="11" size="12" value="'+state.flex[fs].replace(/"/g,'&quot;')+
          '"><input type="submit" value="OK"></form><br>\r\n';
   }
   h += '<br><b>Input power voltage: </b>'+state.volt+'V</p></body>\r\n</html>';
   return h;
 }
 
-// Klikniecie przycisku anteny: /?S{bank}{kod}
+// Klikniecie przycisku: /?S{bank}{kod} (antena) lub /?F{s}{0|1} (Radio Flex)
 function handleGet(name){
-  const bank=parseInt(name.charAt(1),10);
+  if (name.charAt(0)==='F'){                     // Flex: F{s}{0|1}
+    const s=parseInt(name.charAt(1),10)-1;
+    const v=parseInt(name.charAt(2),10);
+    if (s>=0 && s<2 && (v===0||v===1)) state.flexOn[s]=v;
+    render(); return;
+  }
+  const bank=parseInt(name.charAt(1),10);        // antena: S{bank}{kod}
   const code=parseInt(name.substring(2),10);
   const p=state.port[bank-1]; if(!p) return;
-  if (code>=0 && code<=7) p.sel=code;           // wybor anteny (tryb zawsze reczny)
+  if (code>=0 && code<=6) p.sel=code;            // wybor anteny (tryb zawsze reczny)
   render();
 }
 
@@ -173,12 +192,18 @@ function render(){
           ev.preventDefault();
           const form=inp.form;
           const nameInp=form && form.querySelector('input[name^="N"]');
-          if (nameInp){                          // zapis nazwy anteny (limit 11 znakow)
-            const k=parseInt(nameInp.name.substring(1),10);
-            state.ant[k]=nameInp.value.substring(0,ANT_MAXLEN);
+          if (nameInp){                          // zapis nazwy (limit 11 znakow)
+            const nm=nameInp.name;               // "N{k}" (antena) lub "NF{s}" (Flex)
+            if (nm.charAt(1)==='F'){
+              const s=parseInt(nm.substring(2),10)-1;
+              if (s>=0 && s<2) state.flex[s]=nameInp.value.substring(0,ANT_MAXLEN);
+            } else {
+              const k=parseInt(nm.substring(1),10);
+              state.ant[k]=nameInp.value.substring(0,ANT_MAXLEN);
+            }
             render();
           } else {
-            handleGet(inp.getAttribute('name'));  // przycisk anteny
+            handleGet(inp.getAttribute('name'));  // przycisk anteny / Flex
           }
         });
       });
@@ -196,7 +221,8 @@ function buildControls(){
 }
 document.getElementById('volt').oninput=(e)=>{ state.volt=e.target.value; render(); };
 document.getElementById('reset').onclick=()=>{
-  initPorts(); state.ant=ANT_DEFAULT.slice(); state.volt="13.8"; state.ports=2;
+  initPorts(); state.ant=ANT_DEFAULT.slice(); state.flex=FLEX_DEFAULT.slice(); state.flexOn=[0,0];
+  state.volt="13.8"; state.ports=2;
   document.getElementById('volt').value="13.8"; buildControls(); render();
 };
 

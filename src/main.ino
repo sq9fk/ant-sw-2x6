@@ -87,22 +87,36 @@ const char ant_3[] PROGMEM = "Delta 80/40";
 const char ant_4[] PROGMEM = "GXP11 40";
 const char ant_5[] PROGMEM = "GXP11 20/10";
 const char ant_6[] PROGMEM = "UB50";
-const char ant_7[] PROGMEM = "6m 5el Yagi";
+const char ant_7[] PROGMEM = "OFF";          // SQ9FK: 7. antena usunieta (projekt 6-antenowy) -> placeholder
 const char ant_8[] PROGMEM = "M-off->BCD";   // <-- do not change this line
 const char* const antDefault[] PROGMEM = {
   ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6, ant_7, ant_8,
 };
+// SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej
+// przekaznik pasma GXP11 40m. Nazwy edytowalne przez WWW (EEPROM), zrodlo inicjalizacji:
+const char flex_0[] PROGMEM = "Flex TRX1";
+const char flex_1[] PROGMEM = "Flex TRX2";
+const char* const flexDefault[] PROGMEM = { flex_0, flex_1 };
 #if defined(WEB_ANT_NAMES)
   #include <EEPROM.h>
-  #define ANT_EE_MAGIC 0xA5
-  char antRAM[9][ANT_MAXLEN + 1];            // edytowalne nazwy w RAM (ladowane z EEPROM)
-  static const char* antName(byte idx) { return antRAM[idx]; }
+  #define ANT_EE_MAGIC 0xA5                          // magic sekcji nazw anten 1..6 (bez zmian -> nazwy zachowane)
+  // SQ9FK: sekcja nazw Radio Flex ma WLASNY magic (za 6 nazwami anten). Dzieki temu przy
+  // zachowaniu starego EEPROM (magic 0xA5) nazwy anten 1..6 zostaja, a nazwy Flex startuja
+  // z domyslnych (stary bajt na tej pozycji != FLEX_EE_MAGIC), bez smieci ze starej 7. nazwy.
+  #define FLEX_EE_MAGIC 0x5A
+  #define FLEX_MAG_OFF  (1 + 6 * ANT_MAXLEN)         // 67: bajt-magic sekcji Flex
+  #define FLEX_EE_OFF(n) (FLEX_MAG_OFF + 1 + (n) * ANT_MAXLEN)  // 68, 79: nazwy Flex 1/2
+  char antRAM[9][ANT_MAXLEN + 1];            // edytowalne nazwy anten w RAM (ladowane z EEPROM)
+  char flexRAM[2][ANT_MAXLEN + 1];           // SQ9FK: edytowalne nazwy dwoch wyjsc Flex
+  static const char* antName(byte idx)  { return antRAM[idx]; }
+  static const char* flexName(byte n)   { return flexRAM[n]; }
 
   static void loadAntNames() {
     strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly
+    strcpy_P(antRAM[7], (PGM_P)pgm_read_word(&antDefault[7]));  // SQ9FK: 7. poz. nieuzywana
     strcpy_P(antRAM[8], (PGM_P)pgm_read_word(&antDefault[8]));  // M-off->BCD - staly
     boolean ok = (EEPROM.read(0) == ANT_EE_MAGIC);
-    for (byte k = 1; k <= 7; k++) {
+    for (byte k = 1; k <= 6; k++) {                            // SQ9FK: 6 anten (bylo 7)
       if (ok) {
         for (byte cc = 0; cc < ANT_MAXLEN; cc++)
           antRAM[k][cc] = EEPROM.read(1 + (k - 1) * ANT_MAXLEN + cc);
@@ -111,12 +125,26 @@ const char* const antDefault[] PROGMEM = {
         strcpy_P(antRAM[k], (PGM_P)pgm_read_word(&antDefault[k]));
       }
     }
+    boolean okF = (EEPROM.read(FLEX_MAG_OFF) == FLEX_EE_MAGIC);  // SQ9FK: nazwy Flex
+    for (byte no = 0; no < 2; no++) {
+      if (okF) {
+        for (byte cc = 0; cc < ANT_MAXLEN; cc++)
+          flexRAM[no][cc] = EEPROM.read(FLEX_EE_OFF(no) + cc);
+        flexRAM[no][ANT_MAXLEN] = '\0';
+      } else {
+        strcpy_P(flexRAM[no], (PGM_P)pgm_read_word(&flexDefault[no]));
+      }
+    }
   }
   static void saveAntNames() {
-    for (byte k = 1; k <= 7; k++)
+    for (byte k = 1; k <= 6; k++)                             // SQ9FK: 6 anten
       for (byte cc = 0; cc < ANT_MAXLEN; cc++)
         EEPROM.update(1 + (k - 1) * ANT_MAXLEN + cc, antRAM[k][cc]);
+    for (byte no = 0; no < 2; no++)                           // SQ9FK: nazwy Flex
+      for (byte cc = 0; cc < ANT_MAXLEN; cc++)
+        EEPROM.update(FLEX_EE_OFF(no) + cc, flexRAM[no][cc]);
     EEPROM.update(0, ANT_EE_MAGIC);
+    EEPROM.update(FLEX_MAG_OFF, FLEX_EE_MAGIC);
   }
   static byte hexNib(char h) {
     if (h >= '0' && h <= '9') return h - '0';
@@ -124,20 +152,23 @@ const char* const antDefault[] PROGMEM = {
     if (h >= 'a' && h <= 'f') return h - 'a' + 10;
     return 0;
   }
-  // Dekoduje wartosc z URL (po '=') do antRAM[k], obcina do ANT_MAXLEN (#zabezpieczenie).
-  static void parseAntName(const char* q, byte k) {
+  // Dekoduje wartosc z URL (po '=') do bufora dst, obcina do ANT_MAXLEN (#zabezpieczenie).
+  static void parseName(const char* q, char* dst) {
     byte n = 0;
     while (*q && *q != ' ' && *q != '&' && n < ANT_MAXLEN) {
       char ch = *q++;
       if (ch == '+') ch = ' ';
       else if (ch == '%' && q[0] && q[1]) { ch = (hexNib(q[0]) << 4) | hexNib(q[1]); q += 2; }
-      antRAM[k][n++] = ch;
+      dst[n++] = ch;
     }
-    antRAM[k][n] = '\0';
+    dst[n] = '\0';
   }
 #else
   static const __FlashStringHelper* antName(byte idx) {
     return (const __FlashStringHelper*)pgm_read_word(&antDefault[idx]);
+  }
+  static const __FlashStringHelper* flexName(byte n) {
+    return (const __FlashStringHelper*)pgm_read_word(&flexDefault[n]);
   }
 #endif
 #define Inputs      6      // number of antenna used ** not implemented ** //SQ9FK was 6
@@ -263,6 +294,8 @@ byte port[8][6] = {
   { 0x22, 0, 0,  0, 0, 1 }, // port3 OUT
   { 0x22, 0, 0,  0, 0, 2 }, // port4 OUT
 };
+// SQ9FK: stan dwoch niezaleznych wyjsc Radio Flex: [0]=GPA7 (K1/J7), [1]=GPB7 (K2/J6). 0=off 1=on
+byte flexState[2] = { 0, 0 };
 
 #if defined(OTRSP)
 char        in_buf[64];  // UART input buffer
@@ -369,17 +402,11 @@ void loop() {
 
     c = 0;
     for (j = 0; j < Ports; j++) {
+      // SQ9FK: kolizja tylko gdy oba TRX zadaja tej samej anteny. Blokada 4<->5 (GXP11)
+      // usunieta - poz. 4 i 5 to teraz niezalezne anteny (bit3/bit4), bit7 przejalo Radio Flex.
       if (i != j && port[i][1] == port[j + 4][1]) {
         c++;
       }
-      //SQ9FK Block Pos 4 and 5 -> GXP11 has external switch from pin6
-      else if (i != j && port[i][1] == 4 && port[j + 4][1] == 5) {
-        c++;
-      }
-      else if (i != j && port[i][1] == 5 && port[j + 4][1] == 4) {
-        c++;  
-      }
-      //
     }
     if (c > 0) {
       port[i][3] = 1;
@@ -437,14 +464,24 @@ void loop() {
           client.print(Ports);
           client.println(F(" SP9PDF - Antenna switch SQ9FK</b></p>"));
           client.println(F("<form method=\"get\">"));
-          // SQ9FK (#5): parsuj prosto z bufora. Zadanie: /?S{bank}{kod} lub /?N{k}={nazwa}.
+          // SQ9FK (#5): parsuj prosto z bufora. Zadania:
+          //   /?S{bank}{kod}   - wybor anteny / tryb (00..06, 20/21)
+          //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WEB_ANT_NAMES)
+          //   /?NF{s}={nazwa}  - edycja nazwy wyjscia Flex s=1/2     (WEB_ANT_NAMES)
+          //   /?F{s}{0|1}      - zalaczenie/wylaczenie Flex s=1/2 (GPA7/GPB7)
 #if defined(WEB_ANT_NAMES)
-          if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '7') {
-            parseAntName(reqBuf + 9, reqBuf[7] - '0');   // edycja nazwy anteny + zapis EEPROM
+          if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '6') {
+            parseName(reqBuf + 9, antRAM[reqBuf[7] - '0']);   // edycja nazwy anteny + zapis EEPROM
+            saveAntNames();
+          } else if (reqBuf[6] == 'N' && reqBuf[7] == 'F' && (reqBuf[8] == '1' || reqBuf[8] == '2')) {
+            parseName(reqBuf + 10, flexRAM[reqBuf[8] - '1']); // edycja nazwy Flex + zapis EEPROM
             saveAntNames();
           } else
 #endif
-          {
+          if (reqBuf[6] == 'F' && (reqBuf[7] == '1' || reqBuf[7] == '2') &&
+                                  (reqBuf[8] == '0' || reqBuf[8] == '1')) {
+            flexState[reqBuf[7] - '1'] = (reqBuf[8] == '1'); // SQ9FK: przelaczenie Radio Flex
+          } else {
             int bankIdx = -1, getVal = 0;
             if (reqLen >= 10 &&
                 reqBuf[7] >= '0' && reqBuf[7] <= '9' &&
@@ -457,7 +494,7 @@ void loop() {
             // przypadkowym przelaczeniom od obcych zadan (np. /favicon.ico, gole GET /)
             // oraz zapisowi poza tablica port[] przy blednym numerze banku.
             if (bankIdx >= 0 && bankIdx < Ports) {
-              if (getVal >= 0 && getVal <= 7) {
+              if (getVal >= 0 && getVal <= 6) {              // SQ9FK: 6 anten (bylo 7)
                 port[bankIdx][1] = getVal;
               } else if (getVal == 20) {
                 port[bankIdx][4] = 0;
@@ -484,9 +521,8 @@ void loop() {
                 client.print(F("21\" value=\"Manual\"> "));
               } else {
 #endif
-                //SQ9FK: pozycje 0..7 generowane w petli (oszczednosc flash;
-                //wyjscie HTML identyczne z rozwinieta wersja)
-                for (byte pos = 0; pos <= 7; pos++) {
+                //SQ9FK: pozycje 0..6 generowane w petli (6 anten; oszczednosc flash)
+                for (byte pos = 0; pos <= 6; pos++) {
                   if (pos == 0) {
                     client.print(F("<input type=\"submit\" name=\"S"));
                   } else {
@@ -528,17 +564,41 @@ void loop() {
           }
 
           client.println(F("</form>"));
+          // SQ9FK: dwa niezalezne wyjscia Radio Flex (GPA7=1/K1/J7, GPB7=2/K2/J6). Klik przelacza.
+          client.println(F("<form method=\"get\">"));
+          for (byte fs = 0; fs < 2; fs++) {
+            client.print(F("<input type=\"submit\" name=\"F"));
+            client.print(fs + 1);                       // strona 1/2
+            client.print(flexState[fs] ? 0 : 1);        // klik przelacza stan
+            client.print(F("\" value=\""));
+            client.print(flexName(fs));
+            client.print(flexState[fs] ? F(" [ON]") : F(" [OFF]"));
+            client.print(F("\" class=\""));
+            if (flexState[fs]) client.print(F("g"));
+            client.print(F("\"> "));
+          }
+          client.println(F("</form>"));
           client.println(F("<br><a href=\".\" onclick=\"window.open( this.href, this.href, 'width=450,height=200,left=0,top=0,menubar=no,location=no,status=no' ); return false;\" > split&#8599;</a>"));
           client.println(F("<br><p><b>Antennas:</b><br>"));
 #if defined(WEB_ANT_NAMES)
-          // SQ9FK: edycja nazw anten (1..7) - kazde pole ma wlasny formularz -> /?N{k}={nazwa}
-          for (byte k = 1; k <= 7; k++) {
+          // SQ9FK: edycja nazw anten (1..6) - kazde pole ma wlasny formularz -> /?N{k}={nazwa}
+          for (byte k = 1; k <= 6; k++) {
             client.print(F("<form method=\"get\" style=\"display:inline\"><b>"));
             client.print(k);
             client.print(F("</b> <input name=\"N"));
             client.print(k);
             client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
             client.print(antName(k));
+            client.println(F("\"><input type=\"submit\" value=\"OK\"></form><br>"));
+          }
+          // SQ9FK: edycja nazw dwoch wyjsc Radio Flex -> /?NF{s}={nazwa}
+          for (byte fs = 0; fs < 2; fs++) {
+            client.print(F("<form method=\"get\" style=\"display:inline\"><b>Flex"));
+            client.print(fs + 1);
+            client.print(F("</b> <input name=\"NF"));
+            client.print(fs + 1);
+            client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
+            client.print(flexName(fs));
             client.println(F("\"><input type=\"submit\" value=\"OK\"></form><br>"));
           }
 #else
@@ -548,7 +608,8 @@ void loop() {
           client.print(F(" | <b>4</b> - ")); client.println(antName(4));
           client.print(F("<br><b>5</b> - ")); client.println(antName(5));
           client.print(F(" | <b>6</b> - ")); client.println(antName(6));
-          client.println(F("<br><b>7</b> - ")); client.println(antName(7));
+          client.print(F("<br><b>Flex1</b> - ")); client.println(flexName(0));
+          client.print(F(" | <b>Flex2</b> - ")); client.println(flexName(1));
 #endif
           client.print(F("<br><b>Input power voltage: </b>"));
           client.print(volt(analogRead(A3)));
@@ -649,7 +710,7 @@ void encI(){
 #if defined(BCD_INPUT)
     port[enc0Pos][1] = enc2(port[enc0Pos][1], 7+1, e); //SQ9FK 0..8 (8 = tryb BCD)
 #else
-    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7, e);   //SQ9FK 0..7 (bez pozycji BCD)
+    port[enc0Pos][1] = enc2(port[enc0Pos][1], 6, e);   //SQ9FK 0..6 (6 anten, bez pozycji BCD)
 #endif
   }  
 }
@@ -754,46 +815,32 @@ void show(int portNR) {
 
 //=====[ TX ]===================================================
 void tx(byte addr, int portNR) {
+  // SQ9FK: czysty one-hot 6 anten (projekt pierwotny). bit0..bit5 = anteny 1..6, bit6 wolny.
+  // bit7 NIE nalezy juz do anteny - steruje nim niezaleznie Radio Flex (patrz nizej).
   switch (port[portNR + 3][1]) {
     case 0: a = B00000000; break;
     case 1: a = B00000001; break;
     case 2: a = B00000010; break;
     case 3: a = B00000100; break;
-    case 4: a = B10001000; break; //SQ9FK GPA7 was used for PTT Out -> now for external GXP11 Rely 40m
-    case 5: a = B00001000; break; //SQ9FK GXP11 Normal 20-10m
-    case 6: a = B00010000; break;
-    case 7: a = B00100000; break; //SQ9FK was: for case 7: a = B00000000; break; -> we add 7th ANT position
-    case 8: a = B00000000; break; //SQ9FK add: 8 is now BCD
+    case 4: a = B00001000; break;
+    case 5: a = B00010000; break;
+    case 6: a = B00100000; break;
+    default: a = B00000000; break; //7/8 nieuzywane w wersji 6-antenowej
   }
-  //SQ9FK Deactivate PTT Check
-  /* if (port[portNR][3] == 1 && port[portNR - 1][1] != 0) {
-    a = a | (1 << 7);
-    )
-  */
   switch (port[portNR + 4][1]) {
     case 0: b = B00000000; break;
     case 1: b = B00000001; break;
     case 2: b = B00000010; break;
     case 3: b = B00000100; break;
-    case 4:
-            b = B00001000;
-            a = a | (1 << 7);
-            break; 
-            //SQ9FK GPA7 was used for PTT Out -> now for external GXP11 Rely 40m
-    case 5: 
-            b = B00001000;
-            a = a & ~(1 << 7);
-            break; 
-            //SQ9FK GXP11 Normal 20-10m
-    case 6: b = B00010000; break;
-    case 7: b = B00100000; break; //SQ9FK was: for case 7: a = B00000000; break; -> we add 7th ANT position
-    case 8: b = B00000000; break; //SQ9FK add: 8 is now BCD
+    case 4: b = B00001000; break;
+    case 5: b = B00010000; break;
+    case 6: b = B00100000; break;
+    default: b = B00000000; break;
   }
-  //SQ9FK Deactivate PTT Check
-  /* if (port[portNR - 1][3] == 1 && port[portNR][1] != 0) {
-    b = b | (1 << 7);
-    }
-  */
+  // SQ9FK: GPA7/GPB7 = dwa niezalezne wyjscia Radio Flex (dawniej przekaznik pasma GXP11 40m).
+  // Sterowane osobnymi przyciskami WWW (flexState[]), niezaleznie od wyboru anteny.
+  if (flexState[0]) a |= (1 << 7);   // GPA7 -> Radio Flex 1 (Q1/K1/J7)
+  if (flexState[1]) b |= (1 << 7);   // GPB7 -> Radio Flex 2 (Q2/K2/J6)
   Wire.beginTransmission(port[portNR + 4][0]);
   Wire.write(0x12);
   Wire.write((byte)a);
@@ -961,7 +1008,7 @@ static void OTRSP_parse() {
           Serial.print(" Current AUX1 Value: ");
           Serial.println(port[0][1]);
         #endif
-        if ( (tmp_aux1 != port[0][1]) && (!( (tmp_aux1 == 4) && (port[0][1] == 5) )) && (!( (tmp_aux1 == 5) && (port[0][1] == 4) ))) {
+        if (tmp_aux1 != port[0][1]) {   //SQ9FK: blokada GXP 4<->5 usunieta (6 niezaleznych anten)
           //port[4][4] = 1;
           port[0][1] = tmp_aux1;
           #if defined(OTRSP_DEBUG)
@@ -994,7 +1041,7 @@ static void OTRSP_parse() {
           Serial.print(" Current AUX2 Value: ");
           Serial.println(port[1][1]);
         #endif
-        if ( (tmp_aux2 != port[1][1]) && (!( (tmp_aux2 == 4) && (port[1][1] == 5) )) && (!( (tmp_aux2 == 5) && (port[1][1] == 4) ))) {
+        if (tmp_aux2 != port[1][1]) {   //SQ9FK: blokada GXP 4<->5 usunieta (6 niezaleznych anten)
           //port[5][4] = 1;
           port[1][1] = tmp_aux2;
           #if defined(OTRSP_DEBUG)
