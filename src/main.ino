@@ -1,4 +1,4 @@
-//#include <Arduino.h>
+#include <Arduino.h>   // jawne dla IntelliSense (build .ino i tak go docieka; naprawia falszywy blad PROGMEM w VS Code)
 
 /*
 
