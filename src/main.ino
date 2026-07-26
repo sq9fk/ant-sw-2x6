@@ -826,7 +826,13 @@ int enc2(int encPos, int range, int count) {
 void show(int portNR) {
   //=====[ IN/OUT number ]==========
   lcd.setCursor(0, portNR);
-  if (port[portNR][1] == 8 || port[portNR][1] == 0) { //SQ9FK is ==8 was ==7 added 7th ANT combination
+  // SQ9FK: puste miejsce numeru dla OFF (poz. 0); przy BCD tez dla trybu BCD (poz. 8 = "M-off->BCD").
+  // Anteny 1..6 pokazuja swoj numer. Poz. 8 istnieje tylko przy BCD_INPUT.
+  if (port[portNR][1] == 0
+#if defined(BCD_INPUT)
+      || port[portNR][1] == 8
+#endif
+     ) {
     lcd.print("  ");
   } else {
     if (port[portNR][1] < 10) {
@@ -866,7 +872,11 @@ void show(int portNR) {
   lcd.setCursor(3, portNR);
   if (port[portNR][3] == 1 && (port[portNR][1] != 0)) {
     lcd.write(byte(0));
-  } else if (port[portNR][1] == 0 || port[portNR][1] == 8) { //SQ9FK is ==8 was ==7 added 7th ANT combination
+  } else if (port[portNR][1] == 0     // OFF (przy BCD tez tryb BCD) - bez wskaznika statusu
+#if defined(BCD_INPUT)
+             || port[portNR][1] == 8
+#endif
+            ) {
     lcd.print(' ');
   } else if (port[portNR][1] == port[portNR + 4][1]) {
     lcd.print('>');
@@ -896,7 +906,7 @@ void show(int portNR) {
   }
   lcd.print(Note);
 #if defined(BCD_INPUT)
-  if (port[portNR][1] == 8) { //SQ9FK is ==8 was ==7 added 7th ANT combination
+  if (port[portNR][1] == 8) { // SQ9FK: poz. 8 = tryb BCD ("M-off->BCD") - wskaznik "M" + numer TRX
     lcd.setCursor(5, portNR);
     lcd.write(byte(2));
     lcd.setCursor(15, portNR);
