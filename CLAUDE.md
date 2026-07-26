@@ -20,7 +20,7 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
   (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
-  WEB_ANT_NAMES WŁ.** — Flash **95,4%** / RAM **46,0%** (nowy wygląd WWW + buforowanie wyjścia).
+  WEB_ANT_NAMES WŁ.** — Flash **95,2%** / RAM **46,0%** (nowy wygląd WWW + buforowanie wyjścia).
   Build z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (CSS odchudzony pod budżet).
   Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup). `OTRSP_parse()`/`serialEvent()` są pod
   `#if defined(OTRSP)`; włączenie OTRSP wymaga wyłączenia `EthModule`.
@@ -94,8 +94,10 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 - **Kluczowe funkcje**: `tx()` (one-hot na przekaźniki), `show()` (rysowanie linii LCD),
   `encI()`/`enc2()` (enkoder na przerwaniu). Opcjonalnie: `rx()` (BCD+PTT, tylko `BCD_INPUT`),
   `OTRSP_parse()` (SO2R, tylko `OTRSP`).
-- **Nazwy anten**: domyślne w `antDefault[]` PROGMEM (indeks 0 = "OFF", 8 = "M-off->BCD" —
-  nieedytowalne). Przy `WEB_ANT_NAMES` nazwy 1–6 są w `antRAM[]` (EEPROM), czytane przez
+- **Nazwy anten**: domyślne w `antDefault[]` PROGMEM. Indeks 0="OFF" = **wybieralny zawsze** (antena
+  odłączona, przycisk „-"/enkoder 0). Indeksy 7 (luka) i 8 ("M-off->BCD" = sentinel BCD) osiągalne
+  tylko przy `BCD_INPUT` (enkoder 0..8) — **pod `#ifdef BCD_INPUT`** (def., `antDefault[]`, `antRAM[7/8]`);
+  bez tej flagi nie istnieją, nie zajmują flash. Przy `WEB_ANT_NAMES` nazwy 1–6 są w `antRAM[]` (EEPROM), czytane przez
   `antName()`. **Nazwa stacji** (topbar): `siteDefault` PROGMEM / `siteRAM[]` (EEPROM), przez `siteName()`.
 
 ## Modyfikacje SQ9FK — o czym pamiętać

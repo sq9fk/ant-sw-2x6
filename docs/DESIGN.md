@@ -147,7 +147,10 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 8. Nazwy anten, nazwa stacji i EEPROM
 
-- Domyślne nazwy: `antDefault[]` w PROGMEM (indeks 0=`OFF`, 8=`M-off->BCD` — nieedytowalne);
+- Domyślne nazwy: `antDefault[]` w PROGMEM. Indeks `0`=`OFF` (**wybieralny zawsze** — antena
+  odłączona). Indeksy `7` (luka po usuniętej 7. antenie) i `8` (`M-off->BCD` = sentinel trybu BCD)
+  są osiągalne **tylko przy `BCD_INPUT`** (enkoder 0..8) — pod `#ifdef`, w domyślnym buildzie nie
+  istnieją i nie zajmują flash;
   domyślna nazwa stacji: `siteDefault` (`"SP9PDF"`). Radio Flex nie ma nazw (same ikony power).
 - Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz **nazwa stacji** w
   `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
@@ -161,7 +164,7 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 95,4 %** (29292 B) / **RAM 46,0 %** (942 B). Build z wszystkim WŁ.
+Domyślny build: **Flash 95,2 %** (29242 B) / **RAM 46,0 %** (942 B). Build z wszystkim WŁ.
 (BCD+PTT+Ethernet): **99,4 %** — mieści się (CSS odchudzony pod budżet flash).
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):

@@ -124,7 +124,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **95,4%** / 29292 B, RAM **46,0%** / 942 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> (Flash **95,2%** / 29242 B, RAM **46,0%** / 942 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
 > Wariant z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (po odchudzeniu CSS).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.

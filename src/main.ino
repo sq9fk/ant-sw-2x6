@@ -79,7 +79,7 @@ to
 #define WEB_ANT_NAMES      // edycja nazw anten przez WWW + zapis w EEPROM (wymaga EthModule)
 #define ANT_MAXLEN 11      // limit dlugosci nazwy anteny (mieści sie na LCD: LCDculumn-5)
 
-// Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 i 8 nieedytowalne.
+// Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 nieedytowalny; 8 = sentinel trybu BCD.
 const char ant_0[] PROGMEM = "OFF";          // <-- do not change this line
 const char ant_1[] PROGMEM = "160m INV-V";
 const char ant_2[] PROGMEM = "80m Dipole";
@@ -87,10 +87,17 @@ const char ant_3[] PROGMEM = "Delta 80/40";
 const char ant_4[] PROGMEM = "GXP11 40";
 const char ant_5[] PROGMEM = "GXP11 20/10";
 const char ant_6[] PROGMEM = "UB50";
-const char ant_7[] PROGMEM = "OFF";          // SQ9FK: 7. antena usunieta (projekt 6-antenowy) -> placeholder
-const char ant_8[] PROGMEM = "M-off->BCD";   // <-- do not change this line
+#if defined(BCD_INPUT)
+// SQ9FK: poz. 7 i 8 osiagalne tylko przy BCD_INPUT (enkoder 0..8). 7 = luka OFF po usunietej
+// 7. antenie, 8 = sentinel trybu BCD. Bez BCD_INPUT nieosiagalne -> pod #ifdef (nie zajmuja flash).
+const char ant_7[] PROGMEM = "OFF";
+const char ant_8[] PROGMEM = "M-off->BCD";
+#endif
 const char* const antDefault[] PROGMEM = {
-  ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6, ant_7, ant_8,
+  ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6,
+#if defined(BCD_INPUT)
+  ant_7, ant_8,                              // poz. 7 (luka) + sentinel BCD - tylko gdy BCD_INPUT
+#endif
 };
 // SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej przekaznik
 // pasma GXP11 40m. Sterowane osobnymi ikonami power w wierszach TRX (WWW), bez nazw.
@@ -110,9 +117,11 @@ const char siteDefault[] PROGMEM = "SP9PDF";
   static const char* siteName()        { return siteRAM; }
 
   static void loadAntNames() {
-    strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly
-    strcpy_P(antRAM[7], (PGM_P)pgm_read_word(&antDefault[7]));  // SQ9FK: 7. poz. nieuzywana
-    strcpy_P(antRAM[8], (PGM_P)pgm_read_word(&antDefault[8]));  // M-off->BCD - staly
+    strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly (indeks 0, wybieralny zawsze)
+#if defined(BCD_INPUT)
+    strcpy_P(antRAM[7], (PGM_P)pgm_read_word(&antDefault[7]));  // luka poz. 7 (tylko BCD)
+    strcpy_P(antRAM[8], (PGM_P)pgm_read_word(&antDefault[8]));  // sentinel trybu BCD (poz. 8)
+#endif
     boolean ok = (EEPROM.read(0) == ANT_EE_MAGIC);
     for (byte k = 1; k <= 6; k++) {                            // SQ9FK: 6 anten (bylo 7)
       if (ok) {
