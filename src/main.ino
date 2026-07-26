@@ -319,6 +319,7 @@ unsigned long Timeout[5][2] = {
   {0, 5000},
   {0, 3000},
 };
+unsigned long voltWarn = 0;   // SQ9FK: znacznik czasu ostrzezenia napiecia (nieblokujaco, 0=brak)
 boolean buttonActive = false;
 boolean longPressActive = false;
 // Glify LCD w PROGMEM (CGRAM 0..5): ERR, PTT, MAN, Cursor, mCursor, m
@@ -382,7 +383,7 @@ void setup()
   lcd.setCursor(3, Ports / 2);
   lcd.print(Ports);
 
-  delay(2000);      //5S
+  delay(2000);      // splash startowy na LCD (2 s); daje tez czas na rozruch W5500
   lcd.clear();
   byte cbuf[8];
   for (byte g = 0; g < 6; g++) {
@@ -405,11 +406,24 @@ void setup()
   lcd.print(volt(analogRead(A3)));
   lcd.setCursor(7, Ports / 2);
   lcd.print("V");
-  delay(3000);      //5S
+  delay(3000);      // pokaz napiecie zasilania na LCD (3 s)
   lcd.clear();
 #if defined(EthModule)
 #if defined __USE_DHCP__
-  Ethernet.begin(mac);
+  // SQ9FK: DHCP z ponawianiem (router bywa wolny przy starcie). Kazda proba begin(mac) czeka
+  // do 60 s (domyslny timeout Dhcp.h); po 3 nieudanych probach -> fallback na static IP.
+  byte dhcpTry = 0;
+  while (Ethernet.begin(mac) == 0) {
+    dhcpTry++;
+    lcd.clear();
+    lcd.setCursor(1, Ports / 2 - 1);
+    lcd.print(F("DHCP... proba "));
+    lcd.print(dhcpTry);
+    if (dhcpTry >= 3) {
+      Ethernet.begin(mac, ip, myDns, gateway, subnet);   // brak DHCP -> static IP (osiagalny zdalnie)
+      break;
+    }
+  }
 #else
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
 #endif
@@ -420,7 +434,7 @@ void setup()
   lcd.print(F("IP address:"));
   lcd.setCursor(1, Ports / 2);
   lcd.print(Ethernet.localIP());
-  delay(10000);      //5S
+  delay(5000);       // pokaz IP na LCD (5 s)
 #endif
 }
 
@@ -475,6 +489,9 @@ void loop() {
   }
   //=====[ Ethernet ]=================
 #if defined(EthModule)
+#if defined __USE_DHCP__
+  Ethernet.maintain();   // SQ9FK: odnawianie dzierzawy DHCP (nieblokujace); bez tego IP moze przepasc
+#endif
   EthernetClient client = server.available();
   if (client) {
     // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Dla komend anteny
@@ -746,30 +763,27 @@ void loop() {
   }
   //=====[ LCD ]=================
   if (millis() - Timeout[0][0] > (Timeout[0][1])) {
-    for (j = 0; j < Ports; j++) {
-      show(j);
-    }
     Timeout[0][0] = millis();
+    // SQ9FK: kontrola napiecia co Timeout[4] - ostrzezenie NIEBLOKUJACE (bez delay -> WWW/switch
+    // i enkoder dzialaja podczas awarii napiecia). Ostrzezenie trzymane ~2 s przez voltWarn.
     if (millis() - Timeout[4][0] > (Timeout[4][1])) {
-        if(volt(analogRead(A3)) < 10) {
-            lcd.clear();
-            lcd.setCursor(1, Ports / 2 - 1);
-            lcd.print(F("LOW voltage!"));
-            lcd.setCursor(7, Ports / 2);
-            lcd.print(volt(analogRead(A3)));
-            delay(2000);
-        }
-        if(volt(analogRead(A3)) > 15) {
-            lcd.clear();
-            lcd.setCursor(1, Ports / 2 - 1);
-            lcd.print(F("HIGH voltage!"));
-            lcd.setCursor(8, Ports / 2);
-            lcd.print(volt(analogRead(A3)));
-            delay(2000);
-        }
-    Timeout[4][0] = millis();
+      Timeout[4][0] = millis();
+      float v = volt(analogRead(A3));
+      if (v < 10 || v > 15) {
+        lcd.clear();
+        lcd.setCursor(1, Ports / 2 - 1);
+        lcd.print(v < 10 ? F("LOW voltage!") : F("HIGH voltage!"));
+        lcd.setCursor(8, Ports / 2);
+        lcd.print(v);
+        voltWarn = millis();
+      }
     }
-
+    // normalne linie LCD tylko gdy nie trwa ostrzezenie napiecia
+    if (voltWarn == 0 || millis() - voltWarn >= 2000) {
+      for (j = 0; j < Ports; j++) {
+        show(j);
+      }
+    }
   }
 }
 

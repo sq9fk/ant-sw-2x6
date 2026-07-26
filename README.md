@@ -49,7 +49,10 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   wyłączone — wyklucza się rozmiarowo z Ethernetem.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
-- **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania.
+- **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania — **nieblokujące**
+  (nie zamrażają WWW/przełączania podczas awarii).
+- **Odporny start sieci** — DHCP ponawiany (do 60 s/próbę) z **fallbackiem na static IP** po 3 próbach
+  (urządzenie zawsze osiągalne) + `Ethernet.maintain()` (odnawianie dzierżawy).
 - Optymalizacja rozmiaru firmware (PROGMEM, pętle WWW) i utwardzenie serwera WWW.
 
 Domyślne nazwy anten są w `antDefault[]`, domyślna nazwa stacji w `siteDefault` (`src/main.ino`).
@@ -124,8 +127,9 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **95,2%** / 29242 B, RAM **46,0%** / 942 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
-> Wariant z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (po odchudzeniu CSS).
+> (Flash **98,0%** / 30108 B, RAM **46,2%** / 946 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> Flash prawie pełny (~600 B wolne). Wariant **BCD+PTT razem z Ethernetem już się nie mieści**
+> (pełne WWW + odporny start DHCP) — te opcje używać bez `EthModule`.
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:

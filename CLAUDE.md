@@ -20,8 +20,9 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
   (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
-  WEB_ANT_NAMES WŁ.** — Flash **95,2%** / RAM **46,0%** (nowy wygląd WWW + buforowanie wyjścia).
-  Build z wszystkim WŁ. (BCD+PTT+Ethernet): **99,4%** — mieści się (CSS odchudzony pod budżet).
+  WEB_ANT_NAMES WŁ.** — Flash **98,0%** / RAM **46,2%** (WWW + buforowanie + odporny start DHCP).
+  Flash **prawie pełny** (~600 B wolne). Build z **BCD+PTT+Ethernet już się NIE mieści** (~102%) —
+  te opcje bez `EthModule`.
   Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup). `OTRSP_parse()`/`serialEvent()` są pod
   `#if defined(OTRSP)`; włączenie OTRSP wymaga wyłączenia `EthModule`.
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify

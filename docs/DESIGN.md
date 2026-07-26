@@ -70,10 +70,18 @@ Kolejność w każdej iteracji:
    - jeśli kolizja → `port[i][3]=1`, wyjście OFF; inaczej → wyjście = żądanie
      *(przy `PTT_BLOCKING` przełączenie wstrzymane, gdy PTT aktywne)*;
    - `tx()` wystawia wyjścia na ekspander OUT.
-3. **(opcja) Serwer WWW** — obsługa jednego klienta (patrz §7).
+3. **(opcja) Serwer WWW** — `Ethernet.maintain()` (odnawianie dzierżawy DHCP) + obsługa jednego
+   klienta (patrz §7).
 4. **(opcja `serialECHO`)** — telemetria na serial.
 5. **Przycisk** — długie naciśnięcie przełącza `menu1state` (tryb edycji enkoderem).
-6. **LCD** — odświeżenie linii (`show()`), kontrola napięcia (ostrzeżenia LOW/HIGH).
+6. **LCD** — odświeżenie linii (`show()`) co 100 ms + kontrola napięcia co 3 s. Ostrzeżenia
+   LOW/HIGH są **nieblokujące** (znacznik `voltWarn`, ~2 s bez `delay()`) — awaria napięcia nie
+   zamraża WWW/przełączania/enkodera.
+
+**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. Przy
+`__USE_DHCP__` DHCP jest **ponawiany** (`while Ethernet.begin(mac)==0`, każda próba do 60 s), a po
+3 nieudanych próbach **fallback na static IP** (`ip/gateway/subnet`) — urządzenie zawsze dostaje
+adres i jest osiągalne. IP pokazywane na LCD (5 s).
 
 ## 5. Wyjścia anten — `tx()`
 
@@ -164,8 +172,8 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 95,2 %** (29242 B) / **RAM 46,0 %** (942 B). Build z wszystkim WŁ.
-(BCD+PTT+Ethernet): **99,4 %** — mieści się (CSS odchudzony pod budżet flash).
+Domyślny build: **Flash 98,0 %** (30108 B) / **RAM 46,2 %** (946 B). Flash prawie pełny (~600 B).
+Build z wszystkim WŁ. (BCD+PTT+Ethernet) **już się nie mieści** (~102%) — te opcje bez `EthModule`.
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
@@ -195,5 +203,5 @@ BCD/PTT/OTRSP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 
 - Kompilacja: `pio run -e nanoatmega328` (0 ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki
   `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` (razem z
-  Ethernetem **99,4%** — mieści się, ale bez zapasu; nowe dodatki pilnuj pod budżet flash).
+  Ethernetem **~102% — nie mieści się**; sprawdzaj te gałęzie bez `EthModule`).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie) — na docelowej stacji (brak sprzętu w CI).
