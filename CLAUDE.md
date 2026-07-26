@@ -20,9 +20,10 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
   (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
-  WEB_ANT_NAMES WŁ.** — Flash **86,2%** / RAM **46,0%**. Build z wszystkim WŁ. (BCD+PTT):
-  ~90%. `OTRSP_parse()`/`serialEvent()` są pod `#if defined(OTRSP)`; włączenie OTRSP wymaga
-  wyłączenia `EthModule`.
+  WEB_ANT_NAMES WŁ.** — Flash **95,8%** / RAM **45,4%** (nowy wygląd WWW ze statusami/legendą).
+  Flash jest **prawie pełny** (~1,3 KB wolne) — build z BCD+PTT sięga **99,9%** (mieści się na styk).
+  Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup). `OTRSP_parse()`/`serialEvent()` są pod
+  `#if defined(OTRSP)`; włączenie OTRSP wymaga wyłączenia `EthModule`.
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
   przez `memcpy_P`); `BCDmatrixOUT` w `PROGMEM` (`pgm_read_byte`, tylko przy `BCD_INPUT`);
   `port[8][6]` jest `byte`; nazwy anten patrz „Funkcje opcjonalne". Bloki WWW (przyciski
@@ -30,9 +31,15 @@ Wykrywanie kolizji między TRX działa zawsze.
   parsowanie żądania.
 - **Serwer WWW (konwencje):** statyczny nagłówek+CSS jest w PROGMEM (`HTTP_HEAD`/`HTTP_HEAD2`)
   i wysyłany `sendP()` (chunki 64 B, `client.write`) — nie zamieniaj z powrotem na serie
-  `print(F())`. Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
+  `print(F())`. Ikona `POWER_SVG` (Flex) też z PROGMEM przez `sendP()`. **Układ strony** (ciemny teal,
+  wg [[project-rotator-wifi-bridge]]): topbar (`.brand`=nazwa stacji + kropka napięcia), karta
+  **Anteny** (nagłówek `.ahead` + statusy sekcji `.astat`/`.st` 50/50, wiersze `.trx` z przyciskami
+  i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa stacji,
+  nazwy anten, ukryte napięcie). **Flash prawie pełny — przy zmianach HTML/CSS pilnuj budżetu.**
+  Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
   bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WEB_ANT_NAMES` też
-  `N{k}={nazwa}` i `NF{s}={nazwa}` od `reqBuf[6]`), z walidacją cyfr i `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą linię żądania i wtedy
+  `N{k}={nazwa}` (antena) i `NS={nazwa}` (nazwa stacji) od `reqBuf[6]`), z walidacją cyfr i
+  `bankIdx 0..Ports-1`. Serwer czyta tylko pierwszą linię żądania i wtedy
   odpowiada (`if (c=='\n')`), potem `delay(1); client.stop()`. Nie przywracaj `String HTTP_req`.
 - Jedyny budowany plik to `src/main.ino`. Katalog `reference/` jest **poza** budowaniem
   (to warianty historyczne — nie kompilować, nie mieszać z `src/`).
@@ -51,12 +58,13 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 ## Funkcje opcjonalne (#ifdef, na górze src/main.ino)
 
 - `WEB_ANT_NAMES` (WŁ.): nazwy anten 1–6 w RAM (`antRAM[9][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`) oraz
-  nazwy dwóch wyjść Radio Flex w `flexRAM[2][…]`, ładowane z EEPROM (`loadAntNames()`), edytowane
-  przez WWW (formularze `/?N{k}={nazwa}` i `/?NF{s}={nazwa}`, wspólny `parseName(q, dst)` z
-  dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()` (EEPROM.update). **Układ
-  EEPROM**: magic `0xA5` @0 + nazwy anten 1–6; **osobny** magic `0x5A` @`FLEX_MAG_OFF` (67) + nazwy
-  Flex — dzięki temu wgranie na stary EEPROM zachowuje nazwy anten, a Flex startuje z domyślnych.
-  Bez tej flagi nazwy wracają do PROGMEM (`antDefault[]`/`flexDefault[]`), `antName()`/`flexName()`
+  **nazwa stacji** w `siteRAM[…]` (topbar), ładowane z EEPROM (`loadAntNames()`), edytowane przez
+  WWW w karcie **Settings** (formularze `/?N{k}={nazwa}` i `/?NS={nazwa}`, wspólny `parseName(q, dst)`
+  z dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()` (EEPROM.update). **Układ
+  EEPROM**: magic `0xA5` @0 + nazwy anten 1–6; **osobny** magic `0x5B` @`SITE_MAG_OFF` (67) + nazwa
+  stacji — dzięki temu wgranie na stary EEPROM zachowuje nazwy anten, a nazwa stacji startuje z
+  domyślnej. **Radio Flex nie ma już konfigurowalnych nazw** (usunięte — same ikony power w wierszach
+  TRX). Bez tej flagi nazwy wracają do PROGMEM (`antDefault[]`/`siteDefault`), `antName()`/`siteName()`
   zwracają `__FlashStringHelper*`. **Nie zakładaj typu zwrotu** — zależy od flagi (char* vs FSH),
   ale `client.print()` i `String =` obsługują oba.
 - `BCD_INPUT` (WYŁ.): automatyczny wybór anteny z BCD radia. Wyłączony ⇒ brak `rx()`,
@@ -84,7 +92,7 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
   `OTRSP_parse()` (SO2R, tylko `OTRSP`).
 - **Nazwy anten**: domyślne w `antDefault[]` PROGMEM (indeks 0 = "OFF", 8 = "M-off->BCD" —
   nieedytowalne). Przy `WEB_ANT_NAMES` nazwy 1–6 są w `antRAM[]` (EEPROM), czytane przez
-  `antName()`. Nazwy Radio Flex: `flexDefault[]` PROGMEM / `flexRAM[]` (EEPROM), przez `flexName(n)`.
+  `antName()`. **Nazwa stacji** (topbar): `siteDefault` PROGMEM / `siteRAM[]` (EEPROM), przez `siteName()`.
 
 ## Modyfikacje SQ9FK — o czym pamiętać
 
@@ -94,10 +102,11 @@ wszystkimi miejscami dotyczącymi danej zmiany:
 - **6 anten (projekt pierwotny)** — one-hot `bit0..bit5` = anteny 1..6 w `tx()`. Zakres enkodera
   0..6 (`enc2`), przyciski WWW 1..6, walidacja `getVal<=6`. Pozycja „8" (BCD) tylko przy `BCD_INPUT`.
 - **Radio Flex (`bit7` = GPA7/GPB7)** — dwa niezależne wyjścia (`flexState[2]`), nakładane na
-  bajt one-hot w `tx()` niezależnie od anteny. Sterowanie WWW: `/?F{s}{0|1}`, nazwy `/?NF{s}=…`
-  (`flexRAM`, EEPROM). Dawniej `bit7` = przekaźnik pasma GXP11 40 m — **blokada kolizji 4↔5 usunięta**
+  bajt one-hot w `tx()` niezależnie od anteny. Sterowanie WWW: `/?F{s}{0|1}` — **ikony power w
+  wierszach TRX** (`<button class=flx>` + `POWER_SVG`, tylko `i<2`). **Bez konfigurowalnych nazw**
+  (usunięte). Dawniej `bit7` = przekaźnik pasma GXP11 40 m — **blokada kolizji 4↔5 usunięta**
   (poz. 4/5 to niezależne anteny; ogólne wykrywanie kolizji zostaje). Przy edycji pilnuj spójności:
-  `tx()`, parser WWW, przyciski WWW, `flexDefault[]`, load/save EEPROM.
+  `tx()`, parser WWW (`F`), przyciski-ikony w wierszach TRX.
 - **PTT** — traktowanie PTT (odczyt + blokada) jest pod `#define PTT_BLOCKING` i domyślnie
   **wyłączone** (zmiana HW: gniazda PTT jako wyjścia). Nie włączaj bez potwierdzenia.
 

@@ -92,8 +92,8 @@ Numer anteny kodowany **one-hot** na porcie ekspandera OUT (`GPIOA`=TRX1, `GPIOB
 
 **`bit7` = Radio Flex (SQ9FK):** `GPA7`/`GPB7` sterują dwoma **niezależnymi wyjściami Radio Flex**
 (`flexState[0]`/`flexState[1]` → Q1/K1/J7 i Q2/K2/J6), nakładanymi na bajt one-hot **niezależnie od
-wyboru anteny**. Przełączane osobnymi przyciskami WWW (`/?F{s}{0|1}`), z konfigurowalnymi nazwami
-(`/?NF{s}=...`, EEPROM). Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
+wyboru anteny**. Przełączane **ikonami power w wierszach TRX** (`/?F{s}{0|1}`), bez konfigurowalnych
+nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
 `bit6` nieużywany. Poz. 4 i 5 to teraz niezależne anteny → **blokada kolizji 4↔5 usunięta**
 (ogólne wykrywanie kolizji między TRX pozostaje).
 
@@ -121,35 +121,46 @@ i kończy (`delay(1); client.stop()`).
 - `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
 - *(opcja `WEB_ANT_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
-- *(opcja `WEB_ANT_NAMES`)* `NF{s}={nazwa}` — nazwa wyjścia Radio Flex `s`=1/2 → `flexRAM[s-1]`
-  (`parseName()` + `saveAntNames()`).
+- *(opcja `WEB_ANT_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
 
 **Generowanie strony.** Statyczny nagłówek HTTP + `<head>` + CSS są w **PROGMEM**
-(`HTTP_HEAD`/`HTTP_HEAD2`) i wysyłane `sendP()` porcjami 64 B (`client.write`) — mniej zapisów
-do W5500, krótsza blokada `loop()`. Dynamicznie: wiersze TRX (przyciski anten w pętli, klasy
-`g`/`gr` = wybrana/kolizja), *(opcja)* przełącznik Manual/BCD, *(opcja)* plakietka PTT, oraz
-sekcja nazw anten (formularze edycji przy `WEB_ANT_NAMES`, inaczej lista tylko do odczytu).
-Strona odświeża się `meta refresh` co 10 s.
+(`HTTP_HEAD`/`HTTP_HEAD2`) i wysyłane `sendP()` porcjami 64 B (`client.write`); ikona `POWER_SVG`
+(Flex) też z PROGMEM. Dynamicznie (w kontenerze `.wrap`, sekcje `.card`): **topbar** (kropka `.dot`
+czerwona przy napięciu poza 10–15 V + nazwa stacji `.brand`); karta **Anteny** — nagłówek `.ahead`
+ze **statusami sekcji** (`.astat`/`.st`, chipy 50/50: numer + nazwa włączonej anteny) oraz wiersze
+TRX `.trx` (przyciski anten w pętli, klasy `g`/`gr` = wybrana/kolizja; *(opcja)* Manual/BCD;
+*(opcja)* plakietka PTT; **ikona power Radio Flex** `.flx` na końcu wiersza, `F{s}{0|1}`); karta
+**Opis anten** (`.leg` — legenda numer→nazwa); karta **Settings** (`<details>`, zwinięta) z nazwą
+stacji, nazwami anten (`.nm`) i **ukrytym odczytem napięcia**. Strona odświeża się `meta refresh`
+co 10 s. Split usunięty. **Flash prawie pełny** — przy zmianach HTML/CSS pilnuj budżetu.
+
+**Wygląd (SQ9FK).** Konwencja designu przeniesiona z projektu
+[`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge): ciemny motyw teal
+(tło `#12333b`, karty `#1a3a42`/`#21505c`/`#2a5d6b`), akcent żółty `#f5d33c` (wybrana antena /
+Flex WŁ.), alert `#d11534` (kolizja / błąd napięcia), font **Inter** z fallbackiem systemowym
+(bez zewnętrznego linku — oszczędza flash i RTT). Zaokrąglone karty (`1.1em`) i przyciski (`.4em`).
+Klasy CSS (`bcd/bcdr`, `g/gr`, `ptt`, `nm`, `trx`, `card`, `dot`) współdzielone z symulatorem
+[`tools/websim.html`](../tools/websim.html) (`DEVICE_CSS` = lustro `HTTP_HEAD2`).
 
 Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `python tools/serve.py`.
 
-## 8. Nazwy anten i EEPROM
+## 8. Nazwy anten, nazwa stacji i EEPROM
 
 - Domyślne nazwy: `antDefault[]` w PROGMEM (indeks 0=`OFF`, 8=`M-off->BCD` — nieedytowalne);
-  nazwy Radio Flex: `flexDefault[]` (`"Flex TRX1"`, `"Flex TRX2"`).
-- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz nazwy Flex 1–2 w
-  `flexRAM[2][ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
+  domyślna nazwa stacji: `siteDefault` (`"SP9PDF"`). Radio Flex nie ma nazw (same ikony power).
+- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz **nazwa stacji** w
+  `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
   Zapis `saveAntNames()` używa `EEPROM.update` (mniejsze zużycie komórek).
 - **Układ EEPROM (SQ9FK):** bajt `0` = magic `0xA5` (sekcja anten) + 6×`ANT_MAXLEN` (offset `1`);
-  bajt `67` = **osobny magic `0x5A`** (sekcja Flex) + 2×`ANT_MAXLEN` (nazwy Flex, offset `68`, `79`).
-  Osobny magic Flex sprawia, że po wgraniu na istniejący EEPROM (magic `0xA5`) nazwy anten 1–6
-  **zostają**, a nazwy Flex startują z domyślnych (bez śmieci ze starej 7. nazwy).
-- Odczyt zawsze przez `antName(idx)` / `flexName(n)` — zwraca `char*` (RAM) lub
+  bajt `67` = **osobny magic `0x5B`** (sekcja nazwy stacji) + `ANT_MAXLEN` (nazwa stacji, offset `68`).
+  Osobny magic sprawia, że po wgraniu na istniejący EEPROM (magic `0xA5`) nazwy anten 1–6
+  **zostają**, a nazwa stacji startuje z domyślnej.
+- Odczyt zawsze przez `antName(idx)` / `siteName()` — zwraca `char*` (RAM) lub
   `__FlashStringHelper*` (PROGMEM) zależnie od flagi; oba typy obsługują `client.print()` i `String`.
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 86,2 %** (26486 B) / **RAM 46,0 %** (942 B).
+Domyślny build: **Flash 95,8 %** (29418 B) / **RAM 45,4 %** (930 B).
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
@@ -165,7 +176,7 @@ BCD/PTT/OTRSP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 | Funkcja | Miejsca w kodzie |
 |---------|------------------|
 | `EthModule` | globalne (mac/ip/server, `HTTP_HEAD*`, `sendP`), sekcja serwera w `loop()`, `setup()` |
-| `WEB_ANT_NAMES` | deklaracja `antRAM`/`antName`/EEPROM, `setup()` (`loadAntNames`), parser i formularze WWW, rozmiar `reqBuf` |
+| `WEB_ANT_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
 | `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „8" w `show()`, cała funkcja `rx()` |
 | `PTT_BLOCKING` | warunki `if(port[i][2]==0)` w `loop()`, plakietka PTT w `show()` i WWW, odczyt PTT w `rx()` |
 | `OTRSP` | deklaracje bufora, wywołanie w `loop()`, `OTRSP_parse()`, `serialEvent()` |

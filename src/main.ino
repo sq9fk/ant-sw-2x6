@@ -92,24 +92,22 @@ const char ant_8[] PROGMEM = "M-off->BCD";   // <-- do not change this line
 const char* const antDefault[] PROGMEM = {
   ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6, ant_7, ant_8,
 };
-// SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej
-// przekaznik pasma GXP11 40m. Nazwy edytowalne przez WWW (EEPROM), zrodlo inicjalizacji:
-const char flex_0[] PROGMEM = "Flex TRX1";
-const char flex_1[] PROGMEM = "Flex TRX2";
-const char* const flexDefault[] PROGMEM = { flex_0, flex_1 };
+// SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej przekaznik
+// pasma GXP11 40m. Sterowane osobnymi ikonami power w wierszach TRX (WWW), bez nazw.
+// Domyslna nazwa stacji (topbar), edytowalna przez WWW i zapisywana w EEPROM:
+const char siteDefault[] PROGMEM = "SP9PDF";
 #if defined(WEB_ANT_NAMES)
   #include <EEPROM.h>
-  #define ANT_EE_MAGIC 0xA5                          // magic sekcji nazw anten 1..6 (bez zmian -> nazwy zachowane)
-  // SQ9FK: sekcja nazw Radio Flex ma WLASNY magic (za 6 nazwami anten). Dzieki temu przy
-  // zachowaniu starego EEPROM (magic 0xA5) nazwy anten 1..6 zostaja, a nazwy Flex startuja
-  // z domyslnych (stary bajt na tej pozycji != FLEX_EE_MAGIC), bez smieci ze starej 7. nazwy.
-  #define FLEX_EE_MAGIC 0x5A
-  #define FLEX_MAG_OFF  (1 + 6 * ANT_MAXLEN)         // 67: bajt-magic sekcji Flex
-  #define FLEX_EE_OFF(n) (FLEX_MAG_OFF + 1 + (n) * ANT_MAXLEN)  // 68, 79: nazwy Flex 1/2
+  #define ANT_EE_MAGIC  0xA5                         // magic sekcji nazw anten 1..6 (bez zmian -> nazwy zachowane)
+  // SQ9FK: sekcja nazwy stacji ma WLASNY magic (za 6 nazwami anten). Dzieki temu przy zachowaniu
+  // starego EEPROM (magic 0xA5) nazwy anten 1..6 zostaja, a nazwa stacji startuje z domyslnej.
+  #define SITE_EE_MAGIC 0x5B
+  #define SITE_MAG_OFF  (1 + 6 * ANT_MAXLEN)         // 67: bajt-magic sekcji nazwy stacji
+  #define SITE_EE_OFF   (SITE_MAG_OFF + 1)           // 68: nazwa stacji
   char antRAM[9][ANT_MAXLEN + 1];            // edytowalne nazwy anten w RAM (ladowane z EEPROM)
-  char flexRAM[2][ANT_MAXLEN + 1];           // SQ9FK: edytowalne nazwy dwoch wyjsc Flex
-  static const char* antName(byte idx)  { return antRAM[idx]; }
-  static const char* flexName(byte n)   { return flexRAM[n]; }
+  char siteRAM[ANT_MAXLEN + 1];              // SQ9FK: edytowalna nazwa stacji (topbar)
+  static const char* antName(byte idx) { return antRAM[idx]; }
+  static const char* siteName()        { return siteRAM; }
 
   static void loadAntNames() {
     strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly
@@ -125,26 +123,22 @@ const char* const flexDefault[] PROGMEM = { flex_0, flex_1 };
         strcpy_P(antRAM[k], (PGM_P)pgm_read_word(&antDefault[k]));
       }
     }
-    boolean okF = (EEPROM.read(FLEX_MAG_OFF) == FLEX_EE_MAGIC);  // SQ9FK: nazwy Flex
-    for (byte no = 0; no < 2; no++) {
-      if (okF) {
-        for (byte cc = 0; cc < ANT_MAXLEN; cc++)
-          flexRAM[no][cc] = EEPROM.read(FLEX_EE_OFF(no) + cc);
-        flexRAM[no][ANT_MAXLEN] = '\0';
-      } else {
-        strcpy_P(flexRAM[no], (PGM_P)pgm_read_word(&flexDefault[no]));
-      }
+    if (EEPROM.read(SITE_MAG_OFF) == SITE_EE_MAGIC) {          // SQ9FK: nazwa stacji
+      for (byte cc = 0; cc < ANT_MAXLEN; cc++)
+        siteRAM[cc] = EEPROM.read(SITE_EE_OFF + cc);
+      siteRAM[ANT_MAXLEN] = '\0';
+    } else {
+      strcpy_P(siteRAM, siteDefault);
     }
   }
   static void saveAntNames() {
     for (byte k = 1; k <= 6; k++)                             // SQ9FK: 6 anten
       for (byte cc = 0; cc < ANT_MAXLEN; cc++)
         EEPROM.update(1 + (k - 1) * ANT_MAXLEN + cc, antRAM[k][cc]);
-    for (byte no = 0; no < 2; no++)                           // SQ9FK: nazwy Flex
-      for (byte cc = 0; cc < ANT_MAXLEN; cc++)
-        EEPROM.update(FLEX_EE_OFF(no) + cc, flexRAM[no][cc]);
+    for (byte cc = 0; cc < ANT_MAXLEN; cc++)                  // SQ9FK: nazwa stacji
+      EEPROM.update(SITE_EE_OFF + cc, siteRAM[cc]);
     EEPROM.update(0, ANT_EE_MAGIC);
-    EEPROM.update(FLEX_MAG_OFF, FLEX_EE_MAGIC);
+    EEPROM.update(SITE_MAG_OFF, SITE_EE_MAGIC);
   }
   static byte hexNib(char h) {
     if (h >= '0' && h <= '9') return h - '0';
@@ -167,8 +161,8 @@ const char* const flexDefault[] PROGMEM = { flex_0, flex_1 };
   static const __FlashStringHelper* antName(byte idx) {
     return (const __FlashStringHelper*)pgm_read_word(&antDefault[idx]);
   }
-  static const __FlashStringHelper* flexName(byte n) {
-    return (const __FlashStringHelper*)pgm_read_word(&flexDefault[n]);
+  static const __FlashStringHelper* siteName() {
+    return (const __FlashStringHelper*)siteDefault;
   }
 #endif
 #define Inputs      6      // number of antenna used ** not implemented ** //SQ9FK was 6
@@ -207,24 +201,70 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "Content-Type: text/html\r\n"
     "Connection: close\r\n"
     "\r\n"
-    "<!DOCTYPE html>\r\n<html>\r\n<head>\r\n";
+    "<!DOCTYPE html>\r\n<html lang=\"pl\">\r\n<head>\r\n";
+  // SQ9FK: nowy wyglad WWW wg konwencji projektu rotator_wifi_bridge (ciemny teal, akcent zolty,
+  // karty, font Inter z fallbackiem systemowym - bez zewnetrznego linku, oszczedza flash/RTT).
   const char HTTP_HEAD2[] PROGMEM =
-    "<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>\r\n"
-    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\r\n"
-    "<meta name=\"mobile-web-app-capable\" content=\"yes\">\r\n"
-    "<style type=\"text/css\">\r\n"
-    "body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}\r\n"
-    "a:link  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
-    "a:visited  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
-    "a:hover  {color: #888;font-weight: bold;text-decoration: none;}\r\n"
-    "input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}\r\n"
-    "input:hover {border: 2px solid #080;}\r\n"
-    "input.g {background: #080;color: #fff;}\r\n"
-    "input.gr {background: #800;color: #fff;}\r\n"
-    ".bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n"
-    ".bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n"
-    ".ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}\r\n"
+    "<meta charset=\"utf-8\">\r\n"
+    "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n"
+    "<style>\r\n"
+    "body{margin:0;padding:0 0 1.5rem;min-width:290px;background:#12333b;color:#f7f7f7;"
+      "font-family:Inter,Helvetica,Arial,sans-serif}\r\n"
+    ".tb{display:flex;align-items:center;gap:.55rem;max-width:760px;margin:0 auto;padding:.9rem 1.2rem}\r\n"
+    ".brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1.1rem}\r\n"
+    ".dot{width:.6rem;height:.6rem;border-radius:50%;background:#06ac51;flex:0 0 auto}\r\n"
+    ".dot.bad{background:#d11534}\r\n"
+    ".wrap{max-width:760px;margin:0 auto;padding:0 1rem;display:flex;flex-direction:column;gap:1rem}\r\n"
+    ".card{background:#1a3a42;border-radius:1.1em;padding:1.1rem 1.2rem}\r\n"
+    "h2{margin:0 0 .8rem;font-size:1rem;font-weight:700}\r\n"
+    ".ahead{display:flex;align-items:center;flex-wrap:wrap;gap:.6rem .7rem;margin-bottom:.85rem}\r\n"
+    ".ahead h2{margin:0}\r\n"
+    ".astat{display:flex;gap:.5rem;flex:1 1 auto;min-width:13rem}\r\n"
+    ".st{display:flex;align-items:center;gap:.5rem;flex:1 1 0;min-width:0;background:#21505c;"
+      "border-radius:.4em;padding:.3rem .5rem;font-size:.88rem}\r\n"
+    ".st .an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\r\n"
+    ".sq{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;"
+      "border-radius:.35em;background:#2a5d6b;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\r\n"
+    ".sq.on{background:#f5d33c;color:#162f36}\r\n"
+    ".trx{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;padding:.5rem 0;"
+      "border-bottom:1px solid rgba(255,255,255,.07)}\r\n"
+    ".trx:last-of-type{border-bottom:none}\r\n"
+    ".bcd,.bcdr{border-radius:.4em;padding:.4rem .7rem;margin-right:.35rem;min-width:5rem;"
+      "font-weight:700;font-size:.9rem;display:inline-block}\r\n"
+    ".bcd{background:#21505c}.bcdr{background:#d11534}\r\n"
+    "input[type=submit]{border:none;border-radius:.4em;background:#2a5d6b;color:#f7f7f7;"
+      "font-family:inherit;font-size:.9rem;font-weight:700;padding:.45rem .7rem;margin:.12rem;cursor:pointer}\r\n"
+    "input[type=submit].g{background:#f5d33c;color:#162f36}\r\n"
+    "input[type=submit].gr{background:#d11534;color:#f7f7f7}\r\n"
+    "input:not([type=submit]){border:none;border-radius:.4em;background:#21505c;color:#f7f7f7;"
+      "font-family:inherit;font-size:.9rem;padding:.45rem .6rem}\r\n"
+    ".flx{display:inline-flex;align-items:center;margin-left:auto;border:none;border-radius:.4em;"
+      "background:#2a5d6b;color:#a7b9be;padding:.4rem .55rem;cursor:pointer}\r\n"
+    ".flx svg{width:15px;height:15px}\r\n"
+    ".flx.on{background:#f5d33c;color:#162f36}\r\n"
+    ".ptt{border-radius:.4em;padding:.25rem .55rem;margin-left:.4rem;background:#d11534;"
+      "color:#f7f7f7;font-size:.78rem;font-weight:700}\r\n"
+    ".leg{display:grid;grid-template-columns:repeat(auto-fit,minmax(12.5rem,1fr));gap:.5rem 1.1rem}\r\n"
+    ".li{display:flex;align-items:center;gap:.6rem;font-size:.92rem}\r\n"
+    ".li b{display:inline-flex;align-items:center;justify-content:center;min-width:1.6rem;height:1.6rem;"
+      "background:#2a5d6b;border-radius:.4em;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\r\n"
+    "details.card summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}\r\n"
+    "details.card summary::-webkit-details-marker{display:none}\r\n"
+    "details.card summary h2{margin:0}\r\n"
+    ".chev{color:#a7b9be}\r\n"
+    "details.card[open] summary{margin-bottom:.9rem}\r\n"
+    ".nm{display:flex;align-items:center;gap:.5rem;margin:.4rem 0}\r\n"
+    ".nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\r\n"
+    ".dh{color:#a7b9be;font-size:.8rem;margin:0 0 .8rem}\r\n"
+    ".rows .row{display:flex;justify-content:space-between;padding:.35rem 0}\r\n"
+    ".rows span{color:#a7b9be}strong.warn{color:#d11534}\r\n"
     "</style>\r\n</head>\r\n<body>\r\n";
+
+  // SQ9FK: ikona power (wlacz/wylacz) dla przyciskow Flex - dziedziczy kolor (currentColor)
+  const char POWER_SVG[] PROGMEM =
+    "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" "
+    "stroke-linecap=\"round\"><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"12\"/>"
+    "<path d=\"M6.4 7.3a8 8 0 1 0 11.2 0\"/></svg>";
 
   // Wysyla lancuch z PROGMEM porcjami po 64 B (client.write zamiast setek print(char))
   static void sendP(EthernetClient &cl, PGM_P p) {
@@ -453,28 +493,36 @@ void loop() {
           client.print(Inputs);
           client.print(F("x"));
           client.print(Ports);
-          client.println(F(" SP9PDF - Antenna switch</title>"));
+          client.print(F(" "));
+          client.print(siteName());
+          client.println(F(" - Antenna switch</title>"));
           client.print(F("<meta http-equiv=\"refresh\" content=\"10;url=http://"));
           client.print(Ethernet.localIP());
           client.println(F("\">"));
           sendP(client, HTTP_HEAD2);
-          client.print(F("<p><b>"));
+          // SQ9FK: topbar - kropka statusu (czerwona gdy napiecie poza 10-15 V) + nazwa stacji
+          float vv = volt(analogRead(A3));
+          client.print(F("<nav class=\"tb\"><span class=\"brand\"><span class=\"dot"));
+          if (vv < 10 || vv > 15) client.print(F(" bad"));
+          client.print(F("\"></span>"));
+          client.print(siteName());
+          client.print(F(" "));
           client.print(Inputs);
           client.print(F("x"));
           client.print(Ports);
-          client.println(F(" SP9PDF - Antenna switch SQ9FK</b></p>"));
-          client.println(F("<form method=\"get\">"));
+          client.println(F(" Antenna Switch</span></nav>"));
+          client.println(F("<div class=\"wrap\">"));
           // SQ9FK (#5): parsuj prosto z bufora. Zadania:
           //   /?S{bank}{kod}   - wybor anteny / tryb (00..06, 20/21)
           //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WEB_ANT_NAMES)
-          //   /?NF{s}={nazwa}  - edycja nazwy wyjscia Flex s=1/2     (WEB_ANT_NAMES)
+          //   /?NS={nazwa}     - edycja nazwy stacji (topbar)        (WEB_ANT_NAMES)
           //   /?F{s}{0|1}      - zalaczenie/wylaczenie Flex s=1/2 (GPA7/GPB7)
 #if defined(WEB_ANT_NAMES)
           if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '6') {
             parseName(reqBuf + 9, antRAM[reqBuf[7] - '0']);   // edycja nazwy anteny + zapis EEPROM
             saveAntNames();
-          } else if (reqBuf[6] == 'N' && reqBuf[7] == 'F' && (reqBuf[8] == '1' || reqBuf[8] == '2')) {
-            parseName(reqBuf + 10, flexRAM[reqBuf[8] - '1']); // edycja nazwy Flex + zapis EEPROM
+          } else if (reqBuf[6] == 'N' && reqBuf[7] == 'S') {
+            parseName(reqBuf + 9, siteRAM);                   // edycja nazwy stacji + zapis EEPROM
             saveAntNames();
           } else
 #endif
@@ -504,8 +552,20 @@ void loop() {
             }
           }
 
+          // SQ9FK: naglowek karty Anteny + statusy sekcji (chipy 50/50: numer + nazwa wl. anteny)
+          client.print(F("<section class=\"card\"><div class=\"ahead\"><h2>Anteny</h2><div class=\"astat\">"));
           for (i = 0; i < Ports; i++) {
-              client.print(F("<span class=\"bcd"));
+              client.print(F("<span class=\"st\"><span class=\"sq"));
+              if (port[i][1]) client.print(F(" on"));
+              client.print(F("\">"));
+              client.print(i+1);
+              client.print(F("</span><span class=\"an\">"));
+              client.print(antName(port[i][1]));
+              client.print(F("</span></span>"));
+          }
+          client.println(F("</div></div><form method=\"get\">"));
+          for (i = 0; i < Ports; i++) {
+              client.print(F("<div class=\"trx\"><span class=\"bcd"));
               if (port[i][3] == 1) {
                 client.print(F("r"));
               }
@@ -560,61 +620,70 @@ void loop() {
                 client.print(F("<span class=\"ptt\">PTT</span>"));
               }
 #endif
-              client.print(F("<br>"));
+              // SQ9FK: ikona Radio Flex tego TRX (tylko TRX1/2 = GPA7/GPB7); klik przelacza F{s}{new}
+              if (i < 2) {
+                client.print(F("<button type=\"submit\" class=\"flx"));
+                if (flexState[i]) client.print(F(" on"));
+                client.print(F("\" name=\"F"));
+                client.print(i+1);
+                client.print(flexState[i] ? 0 : 1);
+                client.print(F("\" title=\"Radio Flex TRX"));
+                client.print(i+1);
+                client.print(F("\">"));
+                sendP(client, POWER_SVG);
+                client.print(F("</button>"));
+              }
+              client.print(F("</div>"));
           }
-
-          client.println(F("</form>"));
-          // SQ9FK: dwa niezalezne wyjscia Radio Flex (GPA7=1/K1/J7, GPB7=2/K2/J6). Klik przelacza.
-          client.println(F("<form method=\"get\">"));
-          for (byte fs = 0; fs < 2; fs++) {
-            client.print(F("<input type=\"submit\" name=\"F"));
-            client.print(fs + 1);                       // strona 1/2
-            client.print(flexState[fs] ? 0 : 1);        // klik przelacza stan
-            client.print(F("\" value=\""));
-            client.print(flexName(fs));
-            client.print(flexState[fs] ? F(" [ON]") : F(" [OFF]"));
-            client.print(F("\" class=\""));
-            if (flexState[fs]) client.print(F("g"));
-            client.print(F("\"> "));
-          }
-          client.println(F("</form>"));
-          client.println(F("<br><a href=\".\" onclick=\"window.open( this.href, this.href, 'width=450,height=200,left=0,top=0,menubar=no,location=no,status=no' ); return false;\" > split&#8599;</a>"));
-          client.println(F("<br><p><b>Antennas:</b><br>"));
-#if defined(WEB_ANT_NAMES)
-          // SQ9FK: edycja nazw anten (1..6) - kazde pole ma wlasny formularz -> /?N{k}={nazwa}
+          client.println(F("</form></section>"));
+          // SQ9FK: Opis anten - legenda tylko do odczytu (widac co jest pod numerem)
+          client.println(F("<section class=\"card\"><h2>Opis anten</h2><div class=\"leg\">"));
           for (byte k = 1; k <= 6; k++) {
-            client.print(F("<form method=\"get\" style=\"display:inline\"><b>"));
+            client.print(F("<div class=\"li\"><b>"));
             client.print(k);
-            client.print(F("</b> <input name=\"N"));
+            client.print(F("</b>"));
+            client.print(antName(k));
+            client.println(F("</div>"));
+          }
+          client.println(F("</div></section>"));
+          // SQ9FK: Settings (zwijane <details>) - nazwa stacji + nazwy anten + ukryte napiecie
+          client.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
+#if defined(WEB_ANT_NAMES)
+          client.println(F("<p class=\"dh\">Nazwa stacji i anten - zapis w EEPROM.</p>"));
+          // SQ9FK: nazwa stacji -> /?NS={nazwa}
+          client.print(F("<div class=\"nm\"><b>Nazwa</b><form method=\"get\" style=\"display:inline\">"
+                         "<input name=\"NS\" maxlength=\"11\" size=\"12\" value=\""));
+          client.print(siteName());
+          client.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+          // SQ9FK: edycja nazw anten (1..6) -> /?N{k}={nazwa}
+          for (byte k = 1; k <= 6; k++) {
+            client.print(F("<div class=\"nm\"><b>"));
+            client.print(k);
+            client.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
             client.print(k);
             client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
             client.print(antName(k));
-            client.println(F("\"><input type=\"submit\" value=\"OK\"></form><br>"));
-          }
-          // SQ9FK: edycja nazw dwoch wyjsc Radio Flex -> /?NF{s}={nazwa}
-          for (byte fs = 0; fs < 2; fs++) {
-            client.print(F("<form method=\"get\" style=\"display:inline\"><b>Flex"));
-            client.print(fs + 1);
-            client.print(F("</b> <input name=\"NF"));
-            client.print(fs + 1);
-            client.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
-            client.print(flexName(fs));
-            client.println(F("\"><input type=\"submit\" value=\"OK\"></form><br>"));
+            client.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
           }
 #else
-          client.print(F("<b>1</b> - ")); client.println(antName(1));
-          client.print(F(" | <b>2</b> - ")); client.println(antName(2));
-          client.print(F("<br><b>3</b> - ")); client.println(antName(3));
-          client.print(F(" | <b>4</b> - ")); client.println(antName(4));
-          client.print(F("<br><b>5</b> - ")); client.println(antName(5));
-          client.print(F(" | <b>6</b> - ")); client.println(antName(6));
-          client.print(F("<br><b>Flex1</b> - ")); client.println(flexName(0));
-          client.print(F(" | <b>Flex2</b> - ")); client.println(flexName(1));
+          client.print(F("<div class=\"nm\"><b>Nazwa</b>"));
+          client.println(siteName());
+          client.println(F("</div>"));
+          for (byte k = 1; k <= 6; k++) {
+            client.print(F("<div class=\"nm\"><b>"));
+            client.print(k);
+            client.print(F("</b>"));
+            client.println(antName(k));
+            client.println(F("</div>"));
+          }
 #endif
-          client.print(F("<br><b>Input power voltage: </b>"));
-          client.print(volt(analogRead(A3)));
-          client.println(F("V</p></body>"));
-          client.println(F("</html>"));
+          // SQ9FK: ukryty (w zwinietym Settings) odczyt napiecia zasilania
+          client.print(F("<div class=\"rows\"><div class=\"row\"><span>Napi&#281;cie zasilania</span><strong"));
+          if (vv < 10 || vv > 15) client.print(F(" class=\"warn\""));
+          client.print(F(">"));
+          client.print(vv);
+          client.println(F("V</strong></div></div>"));
+          client.println(F("</details></div></body></html>"));
 
           break;
         }

@@ -37,10 +37,13 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **6 anten (projekt pierwotny)** — czysty one-hot `bit0..bit5` = anteny 1..6 (bez dawnej
   7. pozycji i bez sprzężenia GXP11 4/5).
 - **Radio Flex — dwa niezależne wyjścia** na `GPA7`/`GPB7` (przekaźniki `K1`/`K2`, złącza
-  `J7`/`J6`), przełączane **osobnymi przyciskami WWW**, każde z **konfigurowalną nazwą** (EEPROM).
-  Niezależne od wyboru anteny. Dawniej `bit7` = przekaźnik pasma GXP11 40 m.
-- **Edycja nazw przez WWW** (`WEB_ANT_NAMES`) — nazwy anten 1–6 oraz dwóch wyjść Radio Flex
-  ustawiane na stronie, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
+  `J7`/`J6`), przełączane **ikonami power w wierszach TRX** (WWW), niezależne od wyboru anteny.
+  Dawniej `bit7` = przekaźnik pasma GXP11 40 m.
+- **Nowy wygląd WWW** wg konwencji projektu
+  [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge) — ciemny motyw teal, karty,
+  statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
+- **Edycja nazw przez WWW** (`WEB_ANT_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
+  nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
 - **Sterowanie OTRSP** (SO2R) — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`
   (`2x6SP9PDFRemoteAntennaSwitch`), zgodne m.in. z N1MM+. **Opcjonalne** (`OTRSP`), domyślnie
   wyłączone — wyklucza się rozmiarowo z Ethernetem.
@@ -49,9 +52,9 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania.
 - Optymalizacja rozmiaru firmware (PROGMEM, pętle WWW) i utwardzenie serwera WWW.
 
-Domyślne nazwy anten są w `antDefault[]` na początku `src/main.ino` (nazwy Flex w `flexDefault[]`).
-Przy włączonym `WEB_ANT_NAMES` nazwy anten 1–6 i dwóch wyjść Radio Flex są **edytowalne przez WWW**
-i zapisywane w EEPROM (patrz niżej).
+Domyślne nazwy anten są w `antDefault[]`, domyślna nazwa stacji w `siteDefault` (`src/main.ino`).
+Przy włączonym `WEB_ANT_NAMES` nazwa stacji i nazwy anten 1–6 są **edytowalne przez WWW** (karta
+Settings) i zapisywane w EEPROM (patrz niżej).
 
 ## Konfiguracja (dyrektywy `#define`)
 
@@ -69,7 +72,7 @@ i zapisywane w EEPROM (patrz niżej).
 
 | Define          | Domyślnie | Opis                                                    |
 |-----------------|-----------|---------------------------------------------------------|
-| `WEB_ANT_NAMES` | **WŁ.**   | edycja nazw anten 1–6 i wyjść Radio Flex przez WWW, zapis w EEPROM, limit `ANT_MAXLEN` (11 zn.) |
+| `WEB_ANT_NAMES` | **WŁ.**   | edycja nazwy stacji i nazw anten 1–6 przez WWW (karta Settings), zapis w EEPROM, limit `ANT_MAXLEN` (11 zn.) |
 | `BCD_INPUT`     | WYŁ.      | automatyczny wybór anteny z BCD radia (wejścia MCP IN); wyłączony = tryb wyłącznie ręczny (WWW/enkoder), bez przełącznika Manual/BCD |
 | `PTT_BLOCKING`  | WYŁ.      | odczyt PTT + blokada przełączania podczas TX + plakietka PTT; wyłączony zgodnie ze zmianą HW (gniazda PTT jako wyjścia) |
 
@@ -121,7 +124,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **86,2%** / 26486 B, RAM **46,0%** / 942 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> (Flash **95,8%** / 29418 B, RAM **45,4%** / 930 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
 >
 > ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
 > Wybór konfiguracji:

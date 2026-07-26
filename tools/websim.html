@@ -24,7 +24,7 @@
   .seg { display:inline-flex; border:1px solid var(--line); border-radius:6px; overflow:hidden; }
   .seg button { border:0; background:#fff; padding:5px 12px; cursor:pointer; font-size:13px; }
   .seg button.on { background:var(--accent); color:#fff; }
-  iframe { width:100%; height:420px; border:1px solid var(--line); border-radius:8px; background:#ccc; }
+  iframe { width:100%; height:560px; border:1px solid var(--line); border-radius:8px; background:#12333b; }
   .btn { border:1px solid var(--line); background:#fff; border-radius:6px; padding:6px 12px;
          cursor:pointer; font-size:13px; }
   .btn:hover { border-color:var(--accent); }
@@ -79,13 +79,13 @@
 <script>
 const ANT_DEFAULT = ["OFF","160m INV-V","80m Dipole","Delta 80/40","GXP11 40",
                      "GXP11 20/10","UB50","OFF","M-off->BCD"];
-const FLEX_DEFAULT = ["Flex TRX1","Flex TRX2"];   // GPA7 (K1/J7), GPB7 (K2/J6)
+const SITE_DEFAULT = "SP9PDF";     // edytowalna nazwa stacji (topbar), zapis w EEPROM
 const ANT_MAXLEN = 11;
 const state = {
   inputs: 6, ports: 2, volt: "13.8",
+  site: SITE_DEFAULT,              // edytowalna nazwa stacji
   ant: ANT_DEFAULT.slice(),
-  flex: FLEX_DEFAULT.slice(),      // edytowalne nazwy dwoch wyjsc Flex
-  flexOn: [0,0],                   // stan dwoch wyjsc Flex (GPA7/GPB7)
+  flexOn: [0,0],                   // stan dwoch wyjsc Flex (GPA7/GPB7) - bez nazw
   port: []                        // per-TRX: {sel, err}
 };
 function initPorts(){ state.port = []; for (let i=0;i<4;i++) state.port.push({sel:0, err:0}); }
@@ -103,64 +103,123 @@ function recalcErr(){
   }
 }
 
+// CSS urzadzenia - lustro HTTP_HEAD2 z firmware (paleta teal / akcent zolty, karty, Inter)
+const DEVICE_CSS =
+  'body{margin:0;padding:0 0 1.5rem;min-width:290px;background:#12333b;color:#f7f7f7;font-family:Inter,Helvetica,Arial,sans-serif}\n'+
+  '.tb{display:flex;align-items:flex-start;flex-wrap:wrap;gap:.5rem .9rem;max-width:760px;margin:0 auto;padding:.9rem 1.2rem}\n'+
+  '.brand{display:flex;align-items:center;gap:.55rem;font-weight:800;font-size:1.1rem;min-height:1.6rem}\n'+
+  '.dot{width:.6rem;height:.6rem;border-radius:50%;background:#06ac51;flex:0 0 auto}\n'+
+  '.dot.bad{background:#d11534}\n'+
+  /* naglowek karty Anteny: tytul + statusy sekcji (chipy 50/50 obok napisu) */
+  '.ahead{display:flex;align-items:center;flex-wrap:wrap;gap:.6rem .7rem;margin-bottom:.85rem}\n'+
+  '.ahead h2{margin:0}\n'+
+  '.astat{display:flex;gap:.5rem;flex:1 1 auto;min-width:13rem}\n'+
+  '.st{display:flex;align-items:center;gap:.5rem;flex:1 1 0;min-width:0;background:#21505c;border-radius:.4em;padding:.3rem .5rem;font-size:.88rem}\n'+
+  '.st .an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n'+
+  '.sq{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:.35em;background:#2a5d6b;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\n'+
+  '.sq.on{background:#f5d33c;color:#162f36}\n'+
+  '.wrap{max-width:760px;margin:0 auto;padding:0 1rem;display:flex;flex-direction:column;gap:1rem}\n'+
+  '.card{background:#1a3a42;border-radius:1.1em;padding:1.1rem 1.2rem}\n'+
+  'h2{margin:0 0 .8rem;font-size:1rem;font-weight:700}\n'+
+  '.trx{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.07)}\n'+
+  '.trx:last-of-type{border-bottom:none}\n'+
+  '.bcd,.bcdr{border-radius:.4em;padding:.4rem .7rem;margin-right:.35rem;min-width:5rem;font-weight:700;font-size:.9rem;display:inline-block}\n'+
+  '.bcd{background:#21505c}.bcdr{background:#d11534}\n'+
+  'input[type=submit]{border:none;border-radius:.4em;background:#2a5d6b;color:#f7f7f7;font-family:inherit;font-size:.9rem;font-weight:700;padding:.45rem .7rem;margin:.12rem;cursor:pointer}\n'+
+  'input[type=submit]:hover{outline:2px solid #a7b9be}\n'+
+  'input[type=submit]:active{transform:translateY(1px)}\n'+
+  'input[type=submit].g{background:#f5d33c;color:#162f36}\n'+
+  'input[type=submit].gr{background:#d11534;color:#f7f7f7}\n'+
+  'input:not([type=submit]){border:none;border-radius:.4em;background:#21505c;color:#f7f7f7;font-family:inherit;font-size:.9rem;padding:.45rem .6rem}\n'+
+  '.ptt{border-radius:.4em;padding:.25rem .55rem;margin-left:.4rem;background:#d11534;color:#f7f7f7;font-size:.78rem;font-weight:700}\n'+
+  /* Flex jako przycisk-ikona (power) w wierszu TRX; kolor = stan (zolty gdy WL) */
+  '.flx{display:inline-flex;align-items:center;gap:.4rem;margin-left:auto;border:none;border-radius:.4em;background:#2a5d6b;color:#a7b9be;font-family:inherit;font-size:.85rem;font-weight:700;padding:.4rem .7rem;cursor:pointer}\n'+
+  '.flx svg{width:15px;height:15px;flex:0 0 auto}\n'+
+  '.flx:hover{outline:2px solid #a7b9be}\n'+
+  '.flx.on{background:#f5d33c;color:#162f36}\n'+
+  /* karta Settings jako natywny <details> - zwijana, bez JS */
+  'details.card summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}\n'+
+  'details.card summary::-webkit-details-marker{display:none}\n'+
+  'details.card summary h2{margin:0}\n'+
+  'details.card .chev{color:#a7b9be;transition:transform .15s}\n'+
+  'details.card[open] .chev{transform:rotate(180deg)}\n'+
+  'details.card[open] summary{margin-bottom:.9rem}\n'+
+  '.nm{display:flex;align-items:center;gap:.5rem;margin:.4rem 0}\n'+
+  '.nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\n'+
+  '.dh{color:#a7b9be;font-size:.8rem;margin:0 0 .8rem}\n'+
+  /* legenda/opis anten - numer jako badge (jak przycisk), 2 kolumny (auto-fit) */
+  '.leg{display:grid;grid-template-columns:repeat(auto-fit,minmax(12.5rem,1fr));gap:.5rem 1.1rem}\n'+
+  '.li{display:flex;align-items:center;gap:.6rem;font-size:.92rem}\n'+
+  '.li b{display:inline-flex;align-items:center;justify-content:center;min-width:1.6rem;height:1.6rem;background:#2a5d6b;border-radius:.4em;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\n'+
+  '.rows .row{display:flex;justify-content:space-between;padding:.35rem 0}\n'+
+  '.rows span{color:#a7b9be}strong.warn{color:#d11534}\n'+
+  'a{color:#a7b9be;font-weight:600;text-decoration:none;font-size:.85rem}\n';
+
+// Ikona power (wlacz/wylacz) - dziedziczy kolor przez currentColor (dim gdy off, ciemny na zoltym gdy on)
+const POWER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">'+
+  '<line x1="12" y1="3" x2="12" y2="12"/><path d="M6.4 7.3a8 8 0 1 0 11.2 0"/></svg>';
+
 // Dokladny HTML jak firmware (domyslna konfiguracja: bez Manual/BCD/PTT, z edycja nazw)
 function buildDeviceHTML(){
   const P=state.ports, ant=state.ant;
   let h='';
-  h += '<!DOCTYPE html>\r\n<html>\r\n<head>\r\n';
-  h += '<title>'+state.inputs+'x'+P+' SP9PDF - Antenna switch</title>\r\n';
-  h += "<link href='http://fonts.googleapis.com/css?family=Roboto+Condensed:300italic,400italic,700italic,400,700,300&subset=latin-ext' rel='stylesheet' type='text/css'>\r\n";
-  h += '<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">\r\n';
-  h += '<meta name="mobile-web-app-capable" content="yes">\r\n';
-  h += '<style type="text/css">\r\n';
-  h += "body {font-family: 'Roboto Condensed',sans-serif,Arial,Tahoma,Verdana;background: #ccc;}\r\n";
-  h += 'a:link  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
-  h += 'a:visited  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
-  h += 'a:hover  {color: #888;font-weight: bold;text-decoration: none;}\r\n';
-  h += 'input {border: 2px solid #ccc;background: #fff;margin: 10px 5px 0 0;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #333;}\r\n';
-  h += 'input:hover {border: 2px solid #080;}\r\n';
-  h += 'input.g {background: #080;color: #fff;}\r\n';
-  h += 'input.gr {background: #800;color: #fff;}\r\n';
-  h += '.bcd {border: 2px solid #080;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n';
-  h += '.bcdr {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #000;}\r\n';
-  h += '.ptt {border: 2px solid #800;background: #ccc;margin: 10px 5px 0 10px;padding: 1px 7px 1px 7px;-webkit-border-radius: 5px;-moz-border-radius: 5px;border-radius: 5px;color : #800;}\r\n';
-  h += '</style>\r\n</head>\r\n<body>\r\n';
-  h += '<p><b>'+state.inputs+'x'+P+' SP9PDF - Antenna switch SQ9FK</b></p>\r\n';
-  h += '<form method="get">\r\n';
+  const vv=parseFloat(state.volt), bad=(vv<10||vv>15);
+  h += '<!DOCTYPE html>\r\n<html lang="pl">\r\n<head>\r\n';
+  h += '<title>'+state.inputs+'x'+P+' '+state.site.replace(/</g,'&lt;')+' - Antenna switch</title>\r\n';
+  h += '<meta charset="utf-8">\r\n';
+  h += '<meta name="viewport" content="width=device-width, initial-scale=1">\r\n';
+  h += '<meta name="theme-color" content="#12333b">\r\n';
+  h += '<style>\r\n'+DEVICE_CSS+'</style>\r\n</head>\r\n<body>\r\n';
+  // topbar: kropka statusu (czerwona przy napieciu poza 10-15 V) + nazwa stacji
+  h += '<nav class="tb"><span class="brand"><span class="dot'+(bad?' bad':'')+'"></span>'+state.site.replace(/</g,'&lt;')+' '+state.inputs+'x'+P+' Antenna Switch</span></nav>\r\n';
+  h += '<div class="wrap">\r\n';
+  // karta: Anteny - tag TRX pokazuje NAZWE wlaczonej anteny (co jest wlaczone), na koncu
+  // wiersza przycisk-ikona Radio Flex (GPA7/GPB7) bez tekstu (nazwa w title).
+  h += '<section class="card"><div class="ahead"><h2>Anteny</h2><div class="astat">';
+  for (let i=0;i<P;i++){                            // status sekcji: chip 50/50 (numer + nazwa wlaczonej anteny)
+    const s=state.port[i].sel;
+    h += '<span class="st"><span class="sq'+(s?' on':'')+'">'+(i+1)+'</span><span class="an">'+ant[s].replace(/</g,'&lt;')+'</span></span>';
+  }
+  h += '</div></div><form method="get">\r\n';
   for (let i=0;i<P;i++){
     const p=state.port[i];
-    h += '<span class="bcd'+(p.err?'r':'')+'">TRX'+(i+1)+' &#10148; '+p.sel+'</span>';
-    for (let pos=0;pos<=6;pos++){                 // SQ9FK: 6 anten (bylo 7)
+    h += '<div class="trx"><span class="bcd'+(p.err?'r':'')+'">TRX'+(i+1)+' &#10148; '+p.sel+'</span>';
+    for (let pos=0;pos<=6;pos++){                 // SQ9FK: 6 anten
       h += (pos===0 ? '<input type="submit" name="S' : '"><input type="submit" name="S');
       h += (i+1); h += '0'+pos;
       h += '" value="'+(pos===0?'-':pos)+'" class="';
       if (p.sel===pos){ h+='g'; if (p.err) h+='r'; }
     }
-    h += '"> ';                                  // zamkniecie ostatniego przycisku (bez BCD)
-    h += '<br>';
+    h += '">';                                    // zamkniecie ostatniego przycisku anteny
+    // Flex tego TRX: sama ikona power; klasa on = zolty; klik przelacza (F{s}{new}); title statyczny
+    h += '<button type="submit" class="flx'+(state.flexOn[i]?' on':'')+'" name="F'+(i+1)+(state.flexOn[i]?0:1)+
+         '" title="Radio Flex TRX'+(i+1)+'">'+POWER_SVG+'</button>';
+    h += '</div>';
   }
-  h += '\r\n</form>\r\n';
-  // SQ9FK: dwa niezalezne wyjscia Radio Flex (GPA7=1/K1/J7, GPB7=2/K2/J6). Klik przelacza.
-  h += '<form method="get">';
-  for (let fs=0;fs<2;fs++){
-    h += '<input type="submit" name="F'+(fs+1)+(state.flexOn[fs]?0:1)+
-         '" value="'+state.flex[fs].replace(/"/g,'&quot;')+(state.flexOn[fs]?' [ON]':' [OFF]')+
-         '" class="'+(state.flexOn[fs]?'g':'')+'"> ';
+  h += '</form></section>\r\n';
+  // karta: Opis anten (legenda tylko do odczytu - widac co jest pod danym numerem)
+  h += '<section class="card"><h2>Opis anten</h2><div class="leg">\r\n';
+  for (let k=1;k<=6;k++){                          // SQ9FK: 6 anten
+    h += '<div class="li"><b>'+k+'</b>'+ant[k].replace(/</g,'&lt;')+'</div>\r\n';
   }
-  h += '</form>\r\n';
-  h += '<br><a href="." onclick="return false;">split&#8599;</a>\r\n';
-  h += '<br><p><b>Antennas:</b><br>\r\n';
-  for (let k=1;k<=6;k++){                         // SQ9FK: 6 anten
-    h += '<form method="get" style="display:inline"><b>'+k+'</b> <input name="N'+k+
+  h += '</div></section>\r\n';
+  // karta: Settings (zwijana <details>, domyslnie schowana) - nazwy + ukryty odczyt napiecia
+  h += '<details class="card"><summary><h2>Settings</h2><span class="chev">&#9662;</span></summary>\r\n';
+  h += '<p class="dh">Nazwa stacji i nazwy anten (1-6) - zapisywane w EEPROM.</p>\r\n';
+  h += '<div class="nm"><b>Nazwa</b><form method="get" style="display:inline"><input name="NS'+
+       '" maxlength="11" size="12" value="'+state.site.replace(/"/g,'&quot;')+
+       '"><input type="submit" value="OK"></form></div>\r\n';
+  for (let k=1;k<=6;k++){                          // SQ9FK: 6 anten
+    h += '<div class="nm"><b>'+k+'</b><form method="get" style="display:inline"><input name="N'+k+
          '" maxlength="11" size="12" value="'+ant[k].replace(/"/g,'&quot;')+
-         '"><input type="submit" value="OK"></form><br>\r\n';
+         '"><input type="submit" value="OK"></form></div>\r\n';
   }
-  for (let fs=0;fs<2;fs++){                        // SQ9FK: nazwy dwoch wyjsc Flex
-    h += '<form method="get" style="display:inline"><b>Flex'+(fs+1)+'</b> <input name="NF'+(fs+1)+
-         '" maxlength="11" size="12" value="'+state.flex[fs].replace(/"/g,'&quot;')+
-         '"><input type="submit" value="OK"></form><br>\r\n';
-  }
-  h += '<br><b>Input power voltage: </b>'+state.volt+'V</p></body>\r\n</html>';
+  // ukryty (w zwinietym Settings) odczyt napiecia zasilania
+  h += '<div class="rows"><div class="row"><span>Napi&#281;cie zasilania</span>'+
+       '<strong'+(bad?' class="warn"':'')+'>'+state.volt+'V</strong></div></div>\r\n';
+  h += '</details>\r\n';
+  h += '</div></body>\r\n</html>';
   return h;
 }
 
@@ -187,19 +246,17 @@ function render(){
   dev.onload=()=>{
     try{
       const d=dev.contentDocument;
-      d.querySelectorAll('input[type=submit]').forEach(inp=>{
+      d.querySelectorAll('input[type=submit],button[type=submit]').forEach(inp=>{
         inp.addEventListener('click',ev=>{
           ev.preventDefault();
           const form=inp.form;
           const nameInp=form && form.querySelector('input[name^="N"]');
           if (nameInp){                          // zapis nazwy (limit 11 znakow)
-            const nm=nameInp.name;               // "N{k}" (antena) lub "NF{s}" (Flex)
-            if (nm.charAt(1)==='F'){
-              const s=parseInt(nm.substring(2),10)-1;
-              if (s>=0 && s<2) state.flex[s]=nameInp.value.substring(0,ANT_MAXLEN);
+            const nm=nameInp.name;               // "N{k}" (antena) lub "NS" (nazwa stacji)
+            if (nm==='NS'){
+              state.site=nameInp.value.substring(0,ANT_MAXLEN);
             } else {
-              const k=parseInt(nm.substring(1),10);
-              state.ant[k]=nameInp.value.substring(0,ANT_MAXLEN);
+              state.ant[parseInt(nm.substring(1),10)]=nameInp.value.substring(0,ANT_MAXLEN);
             }
             render();
           } else {
@@ -221,7 +278,7 @@ function buildControls(){
 }
 document.getElementById('volt').oninput=(e)=>{ state.volt=e.target.value; render(); };
 document.getElementById('reset').onclick=()=>{
-  initPorts(); state.ant=ANT_DEFAULT.slice(); state.flex=FLEX_DEFAULT.slice(); state.flexOn=[0,0];
+  initPorts(); state.ant=ANT_DEFAULT.slice(); state.site=SITE_DEFAULT; state.flexOn=[0,0];
   state.volt="13.8"; state.ports=2;
   document.getElementById('volt').value="13.8"; buildControls(); render();
 };
