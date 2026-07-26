@@ -49,7 +49,7 @@ Kolumny:
 | idx | nazwa | znaczenie |
 |-----|-------|-----------|
 | `[0]` | adres | adres I²C ekspandera MCP23017 |
-| `[1]` | antena | wybrana/żądana antena: `0`=OFF, `1..6`, `8`=BCD (tylko `BCD_INPUT`) |
+| `[1]` | antena | wybrana/żądana antena: `0`=OFF, `1..6`, `7`=tryb BCD (tylko `BCD_INPUT`) |
 | `[2]` | PTT | stan PTT (tylko `PTT_BLOCKING`) |
 | `[3]` | kolizja | 1 = konflikt z drugim TRX |
 | `[4]` | tryb | 0=auto/BCD, 1=ręczny (istotne tylko przy `BCD_INPUT`) |
@@ -108,7 +108,7 @@ nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
 ## 6. Wybór anteny — źródła
 
 - **Enkoder/LCD:** przerwanie `encI()` + `enc2()`; `menu1state` przełącza między wyborem
-  linii a zmianą numeru anteny. Zakres 0..6 (0..8 przy `BCD_INPUT`).
+  linii a zmianą numeru anteny. Zakres 0..6 (0..7 przy `BCD_INPUT`, gdzie 7 = tryb BCD).
 - **WWW:** żądanie `GET /?S{bank}{kod}` (antena), `GET /?F{s}{0|1}` (Radio Flex) (patrz §7).
 - **(opcja) BCD:** `rx()` czyta 4-bit BCD z ekspandera IN, dekoduje przez `BCDmatrixOUT[2][16]`
   (PROGMEM) → numer anteny.
@@ -156,9 +156,9 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 ## 8. Nazwy anten, nazwa stacji i EEPROM
 
 - Domyślne nazwy: `antDefault[]` w PROGMEM. Indeks `0`=`OFF` (**wybieralny zawsze** — antena
-  odłączona). Indeksy `7` (luka po usuniętej 7. antenie) i `8` (`M-off->BCD` = sentinel trybu BCD)
-  są osiągalne **tylko przy `BCD_INPUT`** (enkoder 0..8) — pod `#ifdef`, w domyślnym buildzie nie
-  istnieją i nie zajmują flash;
+  odłączona). Indeks `7` = `M-off->BCD` (**sentinel trybu BCD**) osiągalny **tylko przy `BCD_INPUT`**
+  (enkoder 0..7) — pod `#ifdef`, w domyślnym buildzie nie istnieje i nie zajmuje flash. Sentinel
+  przesunięty z 8 na 7 → **zlikwidowana martwa luka** po usuniętej 7. antenie (`antRAM` = `[8]`);
   domyślna nazwa stacji: `siteDefault` (`"SP9PDF"`). Radio Flex nie ma nazw (same ikony power).
 - Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz **nazwa stacji** w
   `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
@@ -172,7 +172,7 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 98,0 %** (30108 B) / **RAM 46,2 %** (946 B). Flash prawie pełny (~600 B).
+Domyślny build: **Flash 98,0 %** (30102 B) / **RAM 45,6 %** (934 B). Flash prawie pełny (~600 B).
 Build z wszystkim WŁ. (BCD+PTT+Ethernet) **już się nie mieści** (~102%) — te opcje bez `EthModule`.
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):

@@ -79,7 +79,7 @@ to
 #define WEB_ANT_NAMES      // edycja nazw anten przez WWW + zapis w EEPROM (wymaga EthModule)
 #define ANT_MAXLEN 11      // limit dlugosci nazwy anteny (mieści sie na LCD: LCDculumn-5)
 
-// Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 nieedytowalny; 8 = sentinel trybu BCD.
+// Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 nieedytowalny (OFF); 7 = sentinel trybu BCD.
 const char ant_0[] PROGMEM = "OFF";          // <-- do not change this line
 const char ant_1[] PROGMEM = "160m INV-V";
 const char ant_2[] PROGMEM = "80m Dipole";
@@ -88,15 +88,14 @@ const char ant_4[] PROGMEM = "GXP11 40";
 const char ant_5[] PROGMEM = "GXP11 20/10";
 const char ant_6[] PROGMEM = "UB50";
 #if defined(BCD_INPUT)
-// SQ9FK: poz. 7 i 8 osiagalne tylko przy BCD_INPUT (enkoder 0..8). 7 = luka OFF po usunietej
-// 7. antenie, 8 = sentinel trybu BCD. Bez BCD_INPUT nieosiagalne -> pod #ifdef (nie zajmuja flash).
-const char ant_7[] PROGMEM = "OFF";
-const char ant_8[] PROGMEM = "M-off->BCD";
+// SQ9FK: poz. 7 = sentinel trybu BCD ("M-off->BCD"), osiagalna tylko przy BCD_INPUT (enkoder 0..7).
+// Sentinel przesuniety z 8 na 7 -> zlikwidowana martwa luka (dawna poz. 7 po usunietej 7. antenie).
+const char ant_7[] PROGMEM = "M-off->BCD";
 #endif
 const char* const antDefault[] PROGMEM = {
   ant_0, ant_1, ant_2, ant_3, ant_4, ant_5, ant_6,
 #if defined(BCD_INPUT)
-  ant_7, ant_8,                              // poz. 7 (luka) + sentinel BCD - tylko gdy BCD_INPUT
+  ant_7,                                     // sentinel trybu BCD (poz. 7) - tylko gdy BCD_INPUT
 #endif
 };
 // SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej przekaznik
@@ -111,7 +110,7 @@ const char siteDefault[] PROGMEM = "SP9PDF";
   #define SITE_EE_MAGIC 0x5B
   #define SITE_MAG_OFF  (1 + 6 * ANT_MAXLEN)         // 67: bajt-magic sekcji nazwy stacji
   #define SITE_EE_OFF   (SITE_MAG_OFF + 1)           // 68: nazwa stacji
-  char antRAM[9][ANT_MAXLEN + 1];            // edytowalne nazwy anten w RAM (ladowane z EEPROM)
+  char antRAM[8][ANT_MAXLEN + 1];            // 0=OFF, 1..6 anteny, 7=sentinel BCD (tylko BCD_INPUT)
   char siteRAM[ANT_MAXLEN + 1];              // SQ9FK: edytowalna nazwa stacji (topbar)
   static const char* antName(byte idx) { return antRAM[idx]; }
   static const char* siteName()        { return siteRAM; }
@@ -119,8 +118,7 @@ const char siteDefault[] PROGMEM = "SP9PDF";
   static void loadAntNames() {
     strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly (indeks 0, wybieralny zawsze)
 #if defined(BCD_INPUT)
-    strcpy_P(antRAM[7], (PGM_P)pgm_read_word(&antDefault[7]));  // luka poz. 7 (tylko BCD)
-    strcpy_P(antRAM[8], (PGM_P)pgm_read_word(&antDefault[8]));  // sentinel trybu BCD (poz. 8)
+    strcpy_P(antRAM[7], (PGM_P)pgm_read_word(&antDefault[7]));  // sentinel trybu BCD (poz. 7)
 #endif
     boolean ok = (EEPROM.read(0) == ANT_EE_MAGIC);
     for (byte k = 1; k <= 6; k++) {                            // SQ9FK: 6 anten (bylo 7)
@@ -452,7 +450,7 @@ void loop() {
   for (i = 0; i < Ports; i++) {
 #if defined(BCD_INPUT)
     if (menu1state == 1 && i == enc0Pos) {
-      if (port[i][1] != 8) { //SQ9FK is !=8 was !=7 added 7th ANT combination
+      if (port[i][1] != 7) { //SQ9FK poz. 7 = tryb BCD (sentinel); inaczej tryb reczny
         port[i][4] = 1;
       } else {
         port[i][4] = 0;
@@ -800,7 +798,7 @@ void encI(){
     enc0Pos = enc2(enc0Pos, Ports-1, e);
   } else {
 #if defined(BCD_INPUT)
-    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7+1, e); //SQ9FK 0..8 (8 = tryb BCD)
+    port[enc0Pos][1] = enc2(port[enc0Pos][1], 7, e);   //SQ9FK 0..7 (7 = tryb BCD, bez martwej luki)
 #else
     port[enc0Pos][1] = enc2(port[enc0Pos][1], 6, e);   //SQ9FK 0..6 (6 anten, bez pozycji BCD)
 #endif
@@ -826,11 +824,11 @@ int enc2(int encPos, int range, int count) {
 void show(int portNR) {
   //=====[ IN/OUT number ]==========
   lcd.setCursor(0, portNR);
-  // SQ9FK: puste miejsce numeru dla OFF (poz. 0); przy BCD tez dla trybu BCD (poz. 8 = "M-off->BCD").
-  // Anteny 1..6 pokazuja swoj numer. Poz. 8 istnieje tylko przy BCD_INPUT.
+  // SQ9FK: puste miejsce numeru dla OFF (poz. 0); przy BCD tez dla trybu BCD (poz. 7 = "M-off->BCD").
+  // Anteny 1..6 pokazuja swoj numer. Poz. 7 istnieje tylko przy BCD_INPUT.
   if (port[portNR][1] == 0
 #if defined(BCD_INPUT)
-      || port[portNR][1] == 8
+      || port[portNR][1] == 7
 #endif
      ) {
     lcd.print("  ");
@@ -872,9 +870,9 @@ void show(int portNR) {
   lcd.setCursor(3, portNR);
   if (port[portNR][3] == 1 && (port[portNR][1] != 0)) {
     lcd.write(byte(0));
-  } else if (port[portNR][1] == 0     // OFF (przy BCD tez tryb BCD) - bez wskaznika statusu
+  } else if (port[portNR][1] == 0     // OFF (przy BCD tez tryb BCD, poz. 7) - bez wskaznika statusu
 #if defined(BCD_INPUT)
-             || port[portNR][1] == 8
+             || port[portNR][1] == 7
 #endif
             ) {
     lcd.print(' ');
@@ -906,7 +904,7 @@ void show(int portNR) {
   }
   lcd.print(Note);
 #if defined(BCD_INPUT)
-  if (port[portNR][1] == 8) { // SQ9FK: poz. 8 = tryb BCD ("M-off->BCD") - wskaznik "M" + numer TRX
+  if (port[portNR][1] == 7) { // SQ9FK: poz. 7 = tryb BCD ("M-off->BCD") - wskaznik "M" + numer TRX
     lcd.setCursor(5, portNR);
     lcd.write(byte(2));
     lcd.setCursor(15, portNR);

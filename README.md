@@ -127,7 +127,7 @@ w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
 > **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **98,0%** / 30108 B, RAM **46,2%** / 946 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> (Flash **98,0%** / 30102 B, RAM **45,6%** / 934 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
 > Flash prawie pełny (~600 B wolne). Wariant **BCD+PTT razem z Ethernetem już się nie mieści**
 > (pełne WWW + odporny start DHCP) — te opcje używać bez `EthModule`.
 >
