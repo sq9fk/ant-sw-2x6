@@ -95,14 +95,15 @@ zawsze.
   wracaj do `client.print()` ani per-`send()`.** Statyczny nagłówek+CSS+ikona są w PROGMEM
   (`HTTP_HEAD`/`HTTP_HEAD2`/`POWER_SVG`) i też lecą przez `out.print((const __FlashStringHelper*)…)`.
   **Układ strony** (ciemny teal,
-  wg [[project-rotator-wifi-bridge]]): topbar (`.tb` = nazwa stacji + kropka napięcia), karta
+  wg konwencji projektu [rotator_wifi_bridge](https://github.com/sq9fk/rotator_wifi_bridge)): topbar (`.tb` = nazwa stacji + kropka napięcia), karta
   **Anteny** (nagłówek `.ahead` + statusy sekcji `.astat`/`.st` 50/50, wiersze `.trx` z przyciskami
   i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa
   stacji, nazwy anten, sieć, przycisk Restart — **bez** napięcia, usunięte). **Flash prawie
   pełny — przy zmianach HTML/CSS pilnuj budżetu.**
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
   bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; `R1` = Restart (patrz
-  „Budżet pamięci" wyżej); przy `WWW_EEPROM_NAMES` też
+  „Budżet pamięci" wyżej); `J` = odczyt stanu dla [rotator_wifi_bridge](https://github.com/sq9fk/rotator_wifi_bridge)
+  (`A=ant1,ant2`, reużywa `HTTP_HEAD`, +68 B, patrz `docs/DESIGN.md` §7/§9); przy `WWW_EEPROM_NAMES` też
   `N{k}={nazwa}` (antena), `NS={nazwa}` (nazwa stacji), `N{I|G|M|D}={a.b.c.d}` (IP/gateway/maska/
   DNS) od `reqBuf[6]`), z walidacją cyfr i
   `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +

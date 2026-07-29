@@ -37,6 +37,10 @@ PAGE = "websim.html"
 WS_PATH = "/otrsp-ws"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
+# SQ9FK: stan anteny wybranej dla TRX1/TRX2 (0=OFF, 1..6), sluzy wylacznie do symulacji
+# /?J i /?S{bank}{kod} dla testu integracji z rotator_wifi_bridge - patrz make_handler().
+antenna_state = [0, 0]
+
 
 class WSConnection:
     """Minimalny serwer WebSocket (RFC 6455) - tylko ramki tekstowe, bez fragmentacji.
@@ -209,6 +213,28 @@ class OtrspBridge:
 def make_handler(bridge):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
+            # SQ9FK: symuluje wylacznie /?J i /?S{bank}{kod} - dwie wartosci anten (TRX1/TRX2),
+            # zeby rotator_wifi_bridge dalo sie przetestowac bez sprzetu. Nie modeluje calego
+            # urzadzenia (kolizje/PTT/BCD/nazwy) - to jedyne dwa punkty, ktorych most uzywa.
+            if self.path.startswith("/?"):
+                query = self.path[2:]
+                if query == "J":
+                    body = f"A={antenna_state[0]},{antenna_state[1]}".encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if len(query) == 4 and query[0] == "S" and query[1:].isdigit():
+                    bank = int(query[1]) - 1
+                    code = int(query[2:])
+                    if 0 <= bank <= 1 and 0 <= code <= 6:
+                        antenna_state[bank] = code
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    return
             if self.path == WS_PATH:
                 ws = websocket_handshake(self)
                 if ws is None:

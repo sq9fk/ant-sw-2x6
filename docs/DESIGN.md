@@ -168,6 +168,11 @@ i kończy (`delay(1); client.stop()`).
 - `S{bank}{kod}` — `bank`=`reqBuf[7]`, `kod`=`reqBuf[8..9]`:
   `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
+- `J` — **odczyt stanu dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź `A={port[0][1]},{port[1][1]}`
+  (antena TRX1,TRX2), bez pełnej strony. Reużywa `HTTP_HEAD` zamiast nowego literału PROGMEM —
+  konsumentem jest parser na moście (szuka podciągu `A=`), nie przeglądarka, więc rezygnacja
+  z poprawnego HTML-a nic nie kosztuje, a endpoint jest tani we flashu (patrz §9). Bez tego most
+  musiałby parsować pełny HTML karty Anteny, co jest kruche przy każdej zmianie jej wyglądu.
 - `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
 - `R1` — **Restart** (przycisk w Settings): ustawia `pendingRestart`; sam restart (watchdog
   z timeoutem 15 ms) wykonuje się dopiero na początku **następnej** iteracji `loop()` (patrz §4),
@@ -246,8 +251,13 @@ się tylko w wariantach bez strony WWW — **DHCP zostało w całości usunięte
 (`__USE_DHCP__`, retry-loop w `setup()`, `Ethernet.maintain()` w `loop()`); IP jest teraz zawsze
 statyczne, bez wyjątków.
 
+**Endpoint `/?J`** (2026-07-29, patrz §7) dodał **+68 B** do wszystkich wariantów z `EthModule`
+(reużywa `HTTP_HEAD` zamiast nowego literału — koszt to praktycznie tylko warunek + `F("A=")` +
+dwa `out.print()` już używane gdzie indziej). Domyślny build: **Flash 99,4 %** (30542 B) —
+**zapas ~178 B**. Zmierzono wszystkie 5 wariantów po tej zmianie, wszystkie się mieszczą.
+
 **Domyślny build to `EthModule` + `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+):
-**Flash 99,2 %** (30474 B) / **RAM 52,5 %** (1075 B) — **zapas ~246 B**. To najciaśniejszy
+**Flash 99,2 %** (30474 B, przed `/?J`) / **RAM 52,5 %** (1075 B) — było **~246 B** zapasu. To najciaśniejszy
 z pięciu wariantów (patrz §11) i jest teraz domyślny — każda zmiana we współdzielonym kodzie
 (WWW HTML/CSS, `OTRSP_parse()`, sieć) musi być zbudowana i zmierzona na tym wariancie
 **najpierw**. Ciekawostka: sam kanał TCP (`EthernetServer`/`EthernetClient`) kosztuje więcej

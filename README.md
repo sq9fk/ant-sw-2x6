@@ -53,6 +53,12 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **Konfiguracja sieciowa edytowalna przez WWW** (karta Settings) — **IP, brama, maska, DNS**
   zamiast na sztywno w kodzie; zapisywane w EEPROM (`IPAddress::fromString`, walidacja — błędny
   adres jest ignorowany, stara wartość zostaje). Zmiana wymaga restartu urządzenia.
+- **Odczyt stanu dla `rotator_wifi_bridge`** (`GET /?J` → `A=<trx1>,<trx2>`) — pozwala mostowi
+  [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge) (panel WWW rotora anteny)
+  pokazać i przełączać anteny TRX1/TRX2 z jednego miejsca, zwykłym HTTP GET
+  (`/?S{bank}{kod}`, tak jak własny panel WWW tego urządzenia) — bez OTRSP, które zostaje
+  zarezerwowane wyłącznie dla programu logującego. Endpoint celowo reużywa istniejący nagłówek
+  HTTP (`HTTP_HEAD`) zamiast nowego literału, koszt: **+68 B flash** (patrz `docs/DESIGN.md` §7/§9).
 - **Sterowanie OTRSP** (SO2R, zgodne z [protokołem OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf))
   — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`/`?`, zgodne m.in. z N1MM+. Komendy
   kończy CR (`\r`), zgodnie ze specyfikacją. Kanał USB (`OTRSP`, domyślnie **wyłączony**) i surowe
@@ -161,8 +167,9 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. + OTRSP po TCP WŁ.** (strona WWW + gniazdo TCP dla
 > OTRSP, np. dla N1MM+, port 4534 — static IP). Build zweryfikowany: `pio run -e nanoatmega328`
-> → **SUCCESS**, bez ostrzeżeń (Flash **99,2%** / 30474 B, RAM **52,5%** / 1075 B — domyślne
-> flagi: BCD/PTT wył., nazwy WWW wł., konfiguracja sieciowa edytowalna wł., watchdog wł.).
+> → **SUCCESS**, bez ostrzeżeń (Flash **99,4%** / 30542 B, RAM **52,5%** / 1075 B — domyślne
+> flagi: BCD/PTT wył., nazwy WWW wł., konfiguracja sieciowa edytowalna wł., watchdog wł.,
+> endpoint `/?J` dla `rotator_wifi_bridge` wł.).
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
@@ -177,8 +184,8 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
 > **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
 > - **Strona WWW + OTRSP po surowym TCP** (**obecnie, domyślne**): `#define EthModule`,
->   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **99,2%** (30474 B), RAM **52,5%** (1075 B)
->   — zapas ~246 B. Nadal najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
+>   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **99,4%** (30542 B), RAM **52,5%** (1075 B)
+>   — zapas ~178 B. Nadal najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
 >   zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
 > - **Strona WWW, static IP, bez OTRSP**: `#define EthModule`, `//#define OTRSP`,
 >   `//#define OTRSP_TCP` → Flash **96,2%** (29552 B), RAM **48,3%** (989 B) — zapas ~1,1 KB,
