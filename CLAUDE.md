@@ -22,8 +22,9 @@ Wykrywanie kolizji między TRX działa zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` (strona WWW) i `OTRSP` trzymać
   osobno (wykluczają się rozmiarowo — `#error` w kodzie pilnuje tego w compile-time). Domyślnie:
   **Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WEB_ANT_NAMES
-  WŁ.** — Flash **93,8%** / RAM **47,7%**. Flash **prawie pełny** (~1,9 KB wolne). Build z
-  **BCD+PTT+Ethernet już się NIE mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup).
+  WŁ.** — Flash **97,1%** / RAM **48,2%**. Flash **prawie pełny** (~900 B wolne — skrajnie ciasno).
+  Build z **BCD+PTT+Ethernet już się NIE mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź
+  CSS/markup, generuj w pętli zamiast rozwijać kod).
   **Oficjalna biblioteka Ethernet jest większa niż Ethernet2** (auto-detekcja W5100/W5200/W5500
   w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP dokłada ~3,8 KB**
   (`Dhcp.cpp`+`EthernetUdp.cpp`), dlatego **wyłączone domyślnie** dla strony WWW (`//#define
@@ -36,6 +37,10 @@ Wykrywanie kolizji między TRX działa zawsze.
   USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyślnie 4534) jednocześnie, bez strony WWW, **82,8%**
   flash z DHCP włączonym. `OTRSP_parse(char*, Print&)` jest wspólny dla obu kanałów (Serial
   i EthernetClient dziedziczą po `Print`) — nie duplikuj logiki komend przy zmianach.
+- **Konfiguracja sieciowa edytowalna przez WWW** (`netCfg[4]` = wskaźniki na `ip/gateway/subnet/
+  myDns`, `loadNetConfig()`/`saveNetConfig()`, `parseIPField()` używa `IPAddress::fromString` —
+  **nie pisz własnego parsera dotted-decimal**, biblioteka go ma). IP nie są już „na sztywno" —
+  patrz §8 EEPROM w `docs/DESIGN.md`. Ładowane też dla `OTRSP_TCP` (bez formularza edycji).
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
   przez `memcpy_P`); `BCDmatrixOUT` w `PROGMEM` (`pgm_read_byte`, tylko przy `BCD_INPUT`);
   `port[8][6]` jest `byte`; nazwy anten patrz „Funkcje opcjonalne". Bloki WWW (przyciski
@@ -54,7 +59,8 @@ Wykrywanie kolizji między TRX działa zawsze.
   nazwy anten, ukryte napięcie). **Flash prawie pełny — przy zmianach HTML/CSS pilnuj budżetu.**
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
   bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WEB_ANT_NAMES` też
-  `N{k}={nazwa}` (antena) i `NS={nazwa}` (nazwa stacji) od `reqBuf[6]`), z walidacją cyfr i
+  `N{k}={nazwa}` (antena), `NS={nazwa}` (nazwa stacji), `N{I|G|M|D}={a.b.c.d}` (IP/gateway/maska/
+  DNS) od `reqBuf[6]`), z walidacją cyfr i
   `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +
   `memchr('\n')`), do końca pierwszej linii; potem odpowiedź, `out.done()`, `delay(1); client.stop()`.
   Nie wracaj do czytania po bajcie ani `String HTTP_req`.
@@ -74,14 +80,19 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 
 ## Funkcje opcjonalne (#ifdef, na górze src/main.ino)
 
-- `WEB_ANT_NAMES` (WŁ.): nazwy anten 1–6 w RAM (`antRAM[9][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`) oraz
+- `WEB_ANT_NAMES` (WŁ.): nazwy anten 1–6 w RAM (`antRAM[8][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`) oraz
   **nazwa stacji** w `siteRAM[…]` (topbar), ładowane z EEPROM (`loadAntNames()`), edytowane przez
   WWW w karcie **Settings** (formularze `/?N{k}={nazwa}` i `/?NS={nazwa}`, wspólny `parseName(q, dst)`
-  z dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()` (EEPROM.update). **Układ
-  EEPROM**: magic `0xA5` @0 + nazwy anten 1–6; **osobny** magic `0x5B` @`SITE_MAG_OFF` (67) + nazwa
-  stacji — dzięki temu wgranie na stary EEPROM zachowuje nazwy anten, a nazwa stacji startuje z
-  domyślnej. **Radio Flex nie ma już konfigurowalnych nazw** (usunięte — same ikony power w wierszach
-  TRX). Bez tej flagi nazwy wracają do PROGMEM (`antDefault[]`/`siteDefault`), `antName()`/`siteName()`
+  z dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()` (EEPROM.update). Przy
+  `EthModule`/`OTRSP_TCP`: **konfiguracja sieciowa** (`ip/gateway/subnet/myDns`) też w EEPROM —
+  `loadNetConfig()`/`saveNetConfig()` (osobne funkcje, zadeklarowane PO tych zmiennych — nie
+  przenoś do `loadAntNames()`, bo `IPAddress` tam jeszcze nie istnieje), edycja `/?N{I|G|M|D}=`
+  (`parseIPField()` → `IPAddress::fromString`). **Układ EEPROM**: magic `0xA5` @0 + nazwy anten
+  1–6; **osobny** magic `0x5B` @`SITE_MAG_OFF` (67) + nazwa stacji; **osobny** magic `0x5C`
+  @`NET_MAG_OFF` (79) + 16 B (ip/gateway/maska/dns) — każda sekcja ma własny magic, więc wgranie
+  na stary EEPROM zachowuje to, co już tam było, a nowe sekcje startują z domyślnych. **Radio
+  Flex nie ma już konfigurowalnych nazw** (usunięte — same ikony power w wierszach TRX). Bez tej
+  flagi nazwy wracają do PROGMEM (`antDefault[]`/`siteDefault`), `antName()`/`siteName()`
   zwracają `__FlashStringHelper*`. **Nie zakładaj typu zwrotu** — zależy od flagi (char* vs FSH),
   ale `client.print()` i `String =` obsługują oba.
 - `BCD_INPUT` (WYŁ.): automatyczny wybór anteny z BCD radia. Wyłączony ⇒ brak `rx()`,

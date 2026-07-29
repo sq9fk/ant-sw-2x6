@@ -81,10 +81,16 @@ const ANT_DEFAULT = ["OFF","160m INV-V","80m Dipole","Delta 80/40","GXP11 40",
                      "GXP11 20/10","UB50","OFF","M-off->BCD"];
 const SITE_DEFAULT = "SP9PDF";     // edytowalna nazwa stacji (topbar), zapis w EEPROM
 const ANT_MAXLEN = 11;
+// SQ9FK: konfiguracja sieciowa edytowalna przez Settings (EEPROM) - IP/gateway/maska/DNS,
+// domyslne wartosci jak w src/main.ino. Kolejnosc = netCfg[] w firmware (I,G,M,D).
+const NET_LBL = ["IP","Gateway","Maska","DNS"];
+const NET_CODE = ["I","G","M","D"];
+const NET_DEFAULT = ["192.168.5.45","192.168.5.254","255.255.255.0","8.8.8.8"];
 const state = {
   inputs: 6, ports: 2, volt: "13.8",
   site: SITE_DEFAULT,              // edytowalna nazwa stacji
   ant: ANT_DEFAULT.slice(),
+  net: NET_DEFAULT.slice(),        // [ip, gateway, maska, dns]
   flexOn: [0,0],                   // stan dwoch wyjsc Flex (GPA7/GPB7) - bez nazw
   port: []                        // per-TRX: {sel, err}
 };
@@ -145,7 +151,6 @@ const DEVICE_CSS =
   'details.card[open] summary{margin-bottom:.9rem}\n'+
   '.nm{display:flex;align-items:center;gap:.5rem;margin:.4rem 0}\n'+
   '.nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\n'+
-  '.dh{color:#a7b9be;font-size:.8rem;margin:0 0 .8rem}\n'+
   /* legenda/opis anten - numer jako badge (jak przycisk), 2 kolumny (auto-fit) */
   '.leg{display:grid;grid-template-columns:repeat(auto-fit,minmax(12.5rem,1fr));gap:.5rem 1.1rem}\n'+
   '.li{display:flex;align-items:center;gap:.6rem;font-size:.92rem}\n'+
@@ -214,12 +219,26 @@ function buildDeviceHTML(){
          '" maxlength="11" size="12" value="'+ant[k].replace(/"/g,'&quot;')+
          '"><input type="submit" value="OK"></form></div>\r\n';
   }
+  // SQ9FK: edycja IP/gateway/maski/DNS -> /?N{I|G|M|D}={a.b.c.d}
+  for (let f=0;f<4;f++){
+    h += '<div class="nm"><b>'+NET_LBL[f]+'</b><form method="get" style="display:inline"><input name="N'+NET_CODE[f]+
+         '" maxlength="15" size="15" value="'+state.net[f].replace(/"/g,'&quot;')+
+         '"><input type="submit" value="OK"></form></div>\r\n';
+  }
+  h += '<small>Zmiana sieci wymaga restartu urzadzenia.</small>\r\n';
   // ukryty (w zwinietym Settings) odczyt napiecia zasilania
   h += '<div class="rows"><div class="row"><span>Napi&#281;cie zasilania</span>'+
        '<strong'+(bad?' class="warn"':'')+'>'+state.volt+'V</strong></div></div>\r\n';
   h += '</details>\r\n';
   h += '</div></body>\r\n</html>';
   return h;
+}
+
+// SQ9FK: odzwierciedla IPAddress::fromString (firmware) - 4 liczby 0..255 rozdzielone kropkami
+function isValidIP(s){
+  const p=s.split('.');
+  if (p.length!==4) return false;
+  return p.every(x=>/^\d{1,3}$/.test(x) && +x<=255);
 }
 
 // Klikniecie przycisku: /?S{bank}{kod} (antena) lub /?F{s}{0|1} (Radio Flex)
@@ -250,10 +269,14 @@ function render(){
           ev.preventDefault();
           const form=inp.form;
           const nameInp=form && form.querySelector('input[name^="N"]');
-          if (nameInp){                          // zapis nazwy (limit 11 znakow)
-            const nm=nameInp.name;               // "N{k}" (antena) lub "NS" (nazwa stacji)
+          if (nameInp){                          // zapis nazwy (limit 11 znakow) / IP
+            const nm=nameInp.name;               // "N{k}" antena, "NS" nazwa stacji, "N{I|G|M|D}" siec
+            const netIdx=NET_CODE.indexOf(nm.charAt(1));
             if (nm==='NS'){
               state.site=nameInp.value.substring(0,ANT_MAXLEN);
+            } else if (nm.length===2 && netIdx>=0){
+              // SQ9FK: firmware (IPAddress::fromString) ignoruje bledny adres - symulujemy to samo
+              if (isValidIP(nameInp.value)) state.net[netIdx]=nameInp.value;
             } else {
               state.ant[parseInt(nm.substring(1),10)]=nameInp.value.substring(0,ANT_MAXLEN);
             }
@@ -278,6 +301,7 @@ function buildControls(){
 document.getElementById('volt').oninput=(e)=>{ state.volt=e.target.value; render(); };
 document.getElementById('reset').onclick=()=>{
   initPorts(); state.ant=ANT_DEFAULT.slice(); state.site=SITE_DEFAULT; state.flexOn=[0,0];
+  state.net=NET_DEFAULT.slice();
   state.volt="13.8"; state.ports=2;
   document.getElementById('volt').value="13.8"; buildControls(); render();
 };

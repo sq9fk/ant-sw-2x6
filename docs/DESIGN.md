@@ -90,7 +90,10 @@ Kolejność w każdej iteracji:
 (~3,8 KB) nie mieści się razem ze stroną WWW (patrz §9). Gdy `__USE_DHCP__` włączone: DHCP jest
 **ponawiany** (`while Ethernet.begin(mac, 6000, 4000)==0`, timeout **6 s/próbę jako parametr**
 — oficjalna biblioteka eksponuje go wprost, bez patchowania `Dhcp.h` jak dawniej), a po 3
-nieudanych próbach **fallback na static IP**. IP pokazywane na LCD (5 s).
+nieudanych próbach **fallback na static IP**. **IP pokazywane na LCD (5 s)** przez
+`lcd.print(Ethernet.localIP())` — zawsze rzeczywisty, aktualnie aktywny adres (uwzględnia
+ewentualną edycję `ip`/`gateway`/`subnet` przez WWW Settings + EEPROM, załadowaną wcześniej
+przez `loadNetConfig()`), niezależnie od trybu static/DHCP.
 
 ## 5. Wyjścia anten — `tx()`
 
@@ -154,6 +157,12 @@ i kończy (`delay(1); client.stop()`).
 - *(opcja `WEB_ANT_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
 - *(opcja `WEB_ANT_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
+- *(opcja `WEB_ANT_NAMES`)* `N{I|G|M|D}={a.b.c.d}` — **konfiguracja sieciowa** (IP/gateway/maska/DNS)
+  zamiast na sztywno w kodzie. `parseIPField()` kopiuje wartość do bufora i woła
+  `IPAddress::fromString()` (biblioteka Arduino — nie własny parser); parsuje do zmiennej
+  tymczasowej, commituje do żywej `ip`/`gateway`/`subnet`/`myDns` tylko gdy poprawny adres
+  (błędny input jest **ignorowany**, stara wartość zostaje), potem `saveNetConfig()`. Zmiana
+  wymaga restartu urządzenia (IP nie jest przeładowywane w locie).
 
 **Generowanie strony.** **Całość idzie przez bufor wyjścia `BufP out(client)`** (patrz §9) — `out.print`/
 `out.println`, na końcu `out.done()`. Statyczny nagłówek HTTP + `<head>` + CSS + ikona `POWER_SVG` są
@@ -164,8 +173,10 @@ ze **statusami sekcji** (`.astat`/`.st`, chipy 50/50: numer + nazwa włączonej 
 TRX `.trx` (przyciski anten w pętli, klasy `g`/`gr` = wybrana/kolizja; *(opcja)* Manual/BCD;
 *(opcja)* plakietka PTT; **ikona power Radio Flex** `.flx` na końcu wiersza, `F{s}{0|1}`); karta
 **Opis anten** (`.leg` — legenda numer→nazwa); karta **Settings** (`<details>`, zwinięta) z nazwą
-stacji, nazwami anten (`.nm`) i **ukrytym odczytem napięcia**. Strona odświeża się `meta refresh`
-co 10 s. Split usunięty. **Flash prawie pełny** — przy zmianach HTML/CSS pilnuj budżetu.
+stacji, nazwami anten (`.nm`), **edytowalną konfiguracją sieciową** (IP/gateway/maska/DNS, pętla
+po 4 polach — oszczędność flash, jak przyciski anten) i **ukrytym odczytem napięcia**. Strona
+odświeża się `meta refresh` co 10 s. Split usunięty. **Flash prawie pełny** — przy zmianach
+HTML/CSS pilnuj budżetu.
 
 **Wygląd (SQ9FK).** Konwencja designu przeniesiona z projektu
 [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge): ciemny motyw teal
@@ -177,7 +188,7 @@ Klasy CSS (`bcd/bcdr`, `g/gr`, `ptt`, `nm`, `trx`, `card`, `dot`) współdzielon
 
 Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `python tools/serve.py`.
 
-## 8. Nazwy anten, nazwa stacji i EEPROM
+## 8. Nazwy anten, nazwa stacji, konfiguracja sieciowa i EEPROM
 
 - Domyślne nazwy: `antDefault[]` w PROGMEM. Indeks `0`=`OFF` (**wybieralny zawsze** — antena
   odłączona). Indeks `7` = `M-off->BCD` (**sentinel trybu BCD**) osiągalny **tylko przy `BCD_INPUT`**
@@ -187,12 +198,20 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 - Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[8][ANT_MAXLEN+1]` oraz **nazwa stacji** w
   `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
   Zapis `saveAntNames()` używa `EEPROM.update` (mniejsze zużycie komórek).
+- Przy `EthModule`/`OTRSP_TCP`: **konfiguracja sieciowa** (IP/gateway/maska/DNS) też w EEPROM,
+  zamiast na sztywno w kodzie — `netCfg[4]` (wskaźniki na `ip/gateway/subnet/myDns`),
+  `loadNetConfig()`/`saveNetConfig()` (zadeklarowane **po** tych zmiennych — `loadAntNames()` nie
+  może ich dotykać, bo `IPAddress` tam jeszcze nie istnieje). Ładowane też dla `OTRSP_TCP` (bez
+  formularza edycji — gdyby EEPROM miał już zapisane wartości z wcześniejszego flashowania
+  wariantu WWW na tym samym urządzeniu).
 - **Układ EEPROM (SQ9FK):** bajt `0` = magic `0xA5` (sekcja anten) + 6×`ANT_MAXLEN` (offset `1`);
-  bajt `67` = **osobny magic `0x5B`** (sekcja nazwy stacji) + `ANT_MAXLEN` (nazwa stacji, offset `68`).
-  Osobny magic sprawia, że po wgraniu na istniejący EEPROM (magic `0xA5`) nazwy anten 1–6
-  **zostają**, a nazwa stacji startuje z domyślnej.
+  bajt `67` = magic `0x5B` (sekcja nazwy stacji) + `ANT_MAXLEN` (nazwa stacji, offset `68`);
+  bajt `79` = magic `0x5C` (sekcja sieciowa) + 16 B — 4×4 B (`ip`/`gateway`/`subnet`/`myDns`,
+  offset `80`). **Każda sekcja ma własny magic** — wgranie na istniejący EEPROM zachowuje to,
+  co już tam było, a nowe sekcje (np. sieciowa na starszym EEPROM) startują z domyślnych.
 - Odczyt zawsze przez `antName(idx)` / `siteName()` — zwraca `char*` (RAM) lub
   `__FlashStringHelper*` (PROGMEM) zależnie od flagi; oba typy obsługują `client.print()` i `String`.
+  Konfiguracja sieciowa nie ma takiego rozróżnienia — `IPAddress` zawsze w RAM.
 
 ## 9. Budżet pamięci i optymalizacje
 
@@ -203,9 +222,10 @@ brak `#define`a ograniczającego do samego W5500, w przeciwieństwie do Ethernet
 pod W5500). Efekt: **domyślny build (strona WWW) z DHCP przestał się mieścić** — stąd DHCP
 wyłączone domyślnie (patrz niżej).
 
-Domyślny build (strona WWW, **static IP**, DHCP wył.): **Flash 93,8 %** (28810 B) / **RAM 47,7 %**
-(976 B). Flash prawie pełny (~1,9 KB). Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie
-mieści** niezależnie od DHCP.
+Domyślny build (strona WWW, **static IP edytowalna przez WWW**, DHCP wył.): **Flash 97,1 %**
+(29822 B) / **RAM 48,2 %** (988 B). Flash **skrajnie ciasny** (~900 B wolne — konfiguracja
+sieciowa edytowalna przez WWW kosztowała dodatkowe ~1 KB względem samego static IP na sztywno).
+Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści** niezależnie od DHCP.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
 sam Ethernet. **DHCP kosztuje dodatkowo ~3,8 KB** (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne
@@ -218,6 +238,8 @@ DHCP razem = **106,3 %** (32650 B) — **nie mieści się**, stąd domyślnie st
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
 - generowanie przycisków WWW i listy nazw w **pętli** (mniej powtórzonych łańcuchów `F()`);
+  konfiguracja sieciowa (IP/gateway/maska/DNS) tym samym wzorcem (`netCfg[4]` + PROGMEM etykiety
+  `netLbl[]`/`netCode[]`) zamiast 4 rozwiniętych bloków — istotne przy ~900 B zapasu;
 - **`BufP`** — buforowanie **całego** wyjścia strony (RAM, porcje 128 B) zamiast per-znak `send()`
   do W5500: kilkadziesiąt segmentów TCP zamiast tysiąca → **znacznie szybsze wyświetlanie** i krótsza
   blokada `loop()`. Static (nagłówek/CSS/ikona) i dynamiczny HTML tym samym buforem;

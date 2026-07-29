@@ -44,6 +44,9 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
 - **Edycja nazw przez WWW** (`WEB_ANT_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
   nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
+- **Konfiguracja sieciowa edytowalna przez WWW** (karta Settings) — **IP, brama, maska, DNS**
+  zamiast na sztywno w kodzie; zapisywane w EEPROM (`IPAddress::fromString`, walidacja — błędny
+  adres jest ignorowany, stara wartość zostaje). Zmiana wymaga restartu urządzenia.
 - **Sterowanie OTRSP** (SO2R, zgodne z [protokołem OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf))
   — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`/`?`, zgodne m.in. z N1MM+. Komendy
   kończy CR (`\r`), zgodnie ze specyfikacją. **Opcjonalne** (`OTRSP`), domyślnie wyłączone —
@@ -142,9 +145,9 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **93,8%** / 28810 B, RAM **47,7%** / 976 B — domyślne flagi: DHCP wył., BCD/PTT wył.,
-> nazwy WWW wł.). Flash prawie pełny (~1,9 KB wolne). Wariant **BCD+PTT razem z Ethernetem już
-> się nie mieści** — te opcje bez `EthModule`.
+> (Flash **97,1%** / 29822 B, RAM **48,2%** / 988 B — domyślne flagi: DHCP wył., BCD/PTT wył.,
+> nazwy WWW wł., konfiguracja sieciowa edytowalna wł.). Flash **prawie pełny** (~900 B wolne).
+> Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
 > W5100/W5200/W5500 z auto-detekcją chipu w runtime — niewyłączalna `#define`m, zawsze
@@ -156,12 +159,12 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 >
 > Trzy warianty (wzajemnie wykluczające się — patrz `#error` w `src/main.ino`):
 > - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define __USE_DHCP__`,
->   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **93,8%**
+>   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **97,1%**
 > - **OTRSP po USB**: `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash ~38%, RAM ~37%
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW, **z DHCP** — jest zapas):
 >   `//#define EthModule`, `#define OTRSP`, `#define OTRSP_TCP`, `#define __USE_DHCP__`
->   → Flash **82,8%**, RAM **59,7%**
+>   → Flash **83,1%**, RAM **60,1%**
 
 ### Optymalizacje rozmiaru (zastosowane)
 

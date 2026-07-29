@@ -221,6 +221,46 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   IPAddress gateway(192, 168, 5, 254);    // GATE
   IPAddress subnet(255, 255, 255, 0);     // MASK
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
+#if defined(WEB_ANT_NAMES)
+  // SQ9FK: konfiguracja sieciowa (IP/gateway/maska/DNS) edytowalna przez WWW (EthModule) + EEPROM,
+  // zamiast na sztywno w kodzie. Ladowana tez dla OTRSP_TCP (bez formularza edycji), gdyby EEPROM
+  // mial juz zapisane wartosci z wczesniejszego flashowania wariantu WWW na tym samym urzadzeniu.
+  // Osobny magic (za sekcja nazwy stacji) - stary EEPROM bez tej sekcji zostawia domyslne IP.
+  #define NET_EE_MAGIC 0x5C
+  #define NET_MAG_OFF  (SITE_EE_OFF + ANT_MAXLEN)      // 79: bajt-magic sekcji sieciowej
+  #define NET_EE_OFF   (NET_MAG_OFF + 1)                // 80: 4x4 B (ip/gateway/maska/dns)
+  IPAddress* const netCfg[4] = {&ip, &gateway, &subnet, &myDns};
+  const char netLbl0[] PROGMEM = "IP";
+  const char netLbl1[] PROGMEM = "Gateway";
+  const char netLbl2[] PROGMEM = "Maska";
+  const char netLbl3[] PROGMEM = "DNS";
+  const char* const netLbl[] PROGMEM = {netLbl0, netLbl1, netLbl2, netLbl3};
+  const char netCode[] PROGMEM = "IGMD";       // pierwsza litera kodu pola: NI/NG/NM/ND
+
+  static void loadNetConfig() {
+    if (EEPROM.read(NET_MAG_OFF) == NET_EE_MAGIC)
+      for (byte f = 0; f < 4; f++)
+        for (byte i = 0; i < 4; i++)
+          (*netCfg[f])[i] = EEPROM.read(NET_EE_OFF + f * 4 + i);
+  }
+  static void saveNetConfig() {
+    for (byte f = 0; f < 4; f++)
+      for (byte i = 0; i < 4; i++)
+        EEPROM.update(NET_EE_OFF + f * 4 + i, (*netCfg[f])[i]);
+    EEPROM.update(NET_MAG_OFF, NET_EE_MAGIC);
+  }
+  // SQ9FK: kopiuje wartosc z URL (do spacji/&/limitu) do bufora i probuje sparsowac jako adres
+  // IP (IPAddress::fromString - a.b.c.d). Zwraca false bez modyfikacji `out` przy zlym wejsciu
+  // (fromString moze czesciowo nadpisac bajty przy bledzie, wiec parsujemy do zmiennej tymczasowej
+  // w miejscu wywolania, nie bezposrednio do zywej konfiguracji).
+  static bool parseIPField(const char* q, IPAddress &out) {
+    char buf[16];
+    byte n = 0;
+    while (*q && *q != ' ' && *q != '&' && n < sizeof(buf) - 1) buf[n++] = *q++;
+    buf[n] = '\0';
+    return out.fromString(buf);
+  }
+#endif
 #endif
 #if defined(OTRSP_TCP)
   // SQ9FK: surowe gniazdo TCP dla OTRSP - trwale polaczenie (nie request/response jak WWW),
@@ -398,6 +438,9 @@ void setup()
 {
 #if defined(WEB_ANT_NAMES)
   loadAntNames();          // SQ9FK: wczytaj nazwy anten z EEPROM (lub domyslne)
+#endif
+#if defined(WEB_ANT_NAMES) && (defined(EthModule) || defined(OTRSP_TCP))
+  loadNetConfig();         // SQ9FK: wczytaj IP/gateway/maske/DNS z EEPROM (lub domyslne) - PRZED Ethernet.begin()
 #endif
   Wire.begin();
   for (i = 0; i < Ports; i++) {
@@ -590,6 +633,7 @@ void loop() {
           //   /?S{bank}{kod}   - wybor anteny / tryb (00..06, 20/21)
           //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WEB_ANT_NAMES)
           //   /?NS={nazwa}     - edycja nazwy stacji (topbar)        (WEB_ANT_NAMES)
+          //   /?N{I|G|M|D}={a.b.c.d} - edycja IP/gateway/maski/DNS   (WEB_ANT_NAMES)
           //   /?F{s}{0|1}      - zalaczenie/wylaczenie Flex s=1/2 (GPA7/GPB7)
 #if defined(WEB_ANT_NAMES)
           if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '6') {
@@ -598,6 +642,16 @@ void loop() {
           } else if (reqBuf[6] == 'N' && reqBuf[7] == 'S') {
             parseName(reqBuf + 9, siteRAM);                   // edycja nazwy stacji + zapis EEPROM
             saveAntNames();
+          } else if (reqBuf[6] == 'N' && memchr("IGMD", reqBuf[7], 4)) {
+            // SQ9FK: edycja IP/gateway/maski/DNS - parsuj do zmiennej tymczasowej, zapisz tylko
+            // gdy poprawny adres (fromString==true), zeby zle wejscie nie zepsulo zywej konfiguracji.
+            for (byte f = 0; f < 4; f++) {
+              if (reqBuf[7] == (char)pgm_read_byte(&netCode[f])) {
+                IPAddress tmp;
+                if (parseIPField(reqBuf + 9, tmp)) { *netCfg[f] = tmp; saveNetConfig(); }
+                break;
+              }
+            }
           } else
 #endif
           if (reqBuf[6] == 'F' && (reqBuf[7] == '1' || reqBuf[7] == '2') &&
@@ -738,6 +792,17 @@ void loop() {
             out.print(antName(k));
             out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
           }
+          // SQ9FK: edycja IP/gateway/maski/DNS -> /?N{I|G|M|D}={a.b.c.d} (petla - oszczednosc flash)
+          for (byte f = 0; f < 4; f++) {
+            out.print(F("<div class=\"nm\"><b>"));
+            out.print((const __FlashStringHelper*)pgm_read_word(&netLbl[f]));
+            out.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
+            out.print((char)pgm_read_byte(&netCode[f]));
+            out.print(F("\" maxlength=\"15\" size=\"15\" value=\""));
+            out.print(*netCfg[f]);
+            out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+          }
+          out.println(F("<small>Zmiana sieci wymaga restartu urzadzenia.</small>"));
 #else
           out.print(F("<div class=\"nm\"><b>Nazwa</b>"));
           out.println(siteName());
