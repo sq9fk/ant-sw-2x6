@@ -10,6 +10,9 @@ odbywa się ręcznie (enkoder/LCD + interfejs WWW); automatyka BCD z radia oraz 
 przez PTT to funkcje **opcjonalne** (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)),
 domyślnie wyłączone.
 
+Rozwój firmware (modyfikacje SQ9FK, dokumentacja, symulator WWW) prowadzony jest przy wsparciu
+[Claude Code](https://claude.com/claude-code) (Anthropic).
+
 ## Sprzęt
 
 - Platforma: **Arduino Nano** (ATmega328P)
@@ -42,6 +45,9 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **Nowy wygląd WWW** wg konwencji projektu
   [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge) — ciemny motyw teal, karty,
   statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
+  **Responsywny (mobile-first)** — cele dotykowe min. 44×44 px poniżej 520 px, wyśrodkowana ikona
+  Flex, siatka przycisków TRX zawsze wyrównana do lewej krawędzi karty niezależnie od liczby
+  zawiniętych linii (etykieta TRX na własnym pełnym wierszu na wąskich ekranach).
 - **Edycja nazw przez WWW** (`WWW_EEPROM_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
   nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
 - **Konfiguracja sieciowa edytowalna przez WWW** (karta Settings) — **IP, brama, maska, DNS**
@@ -145,8 +151,8 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **97,1%** / 29822 B, RAM **48,2%** / 988 B — domyślne flagi: DHCP wył., BCD/PTT wył.,
-> nazwy WWW wł., konfiguracja sieciowa edytowalna wł.). Flash **prawie pełny** (~900 B wolne).
+> (Flash **97,0%** / 29794 B, RAM **48,2%** / 988 B — domyślne flagi: DHCP wył., BCD/PTT wył.,
+> nazwy WWW wł., konfiguracja sieciowa edytowalna wł.). Flash **prawie pełny** (~926 B wolne).
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
@@ -159,12 +165,12 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 >
 > Trzy warianty (wzajemnie wykluczające się — patrz `#error` w `src/main.ino`):
 > - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define __USE_DHCP__`,
->   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **97,1%**
+>   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **97,0%** (29794 B), RAM **48,2%** (988 B)
 > - **OTRSP po USB**: `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash ~38%, RAM ~37%
+>   → Flash **37,9%** (11634 B), RAM **37,3%** (763 B)
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW, **z DHCP** — jest zapas):
 >   `//#define EthModule`, `#define OTRSP`, `#define OTRSP_TCP`, `#define __USE_DHCP__`
->   → Flash **83,1%**, RAM **60,1%**
+>   → Flash **82,6%** (25386 B), RAM **60,0%** (1228 B)
 
 ### Optymalizacje rozmiaru (zastosowane)
 

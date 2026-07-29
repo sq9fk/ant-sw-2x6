@@ -130,7 +130,7 @@ const DEVICE_CSS =
   '.trx:last-of-type{border-bottom:none}\n'+
   '.bcd,.bcdr{border-radius:.4em;padding:.4rem .7rem;margin-right:.35rem;min-width:5rem;font-weight:700;font-size:.9rem;display:inline-block}\n'+
   '.bcd{background:#21505c}.bcdr{background:#d11534}\n'+
-  'input[type=submit]{border:none;border-radius:.4em;background:#2a5d6b;color:#f7f7f7;font-family:inherit;font-size:.9rem;font-weight:700;padding:.45rem .7rem;margin:.12rem;cursor:pointer}\n'+
+  'input[type=submit]{border:none;border-radius:.4em;background:#2a5d6b;color:#f7f7f7;font-family:inherit;font-size:.9rem;font-weight:700;padding:.45rem .7rem;cursor:pointer}\n'+
   'input[type=submit]:hover{outline:2px solid #a7b9be}\n'+
   'input[type=submit]:active{transform:translateY(1px)}\n'+
   'input[type=submit].g{background:#f5d33c;color:#162f36}\n'+
@@ -138,8 +138,8 @@ const DEVICE_CSS =
   'input:not([type=submit]){border:none;border-radius:.4em;background:#21505c;color:#f7f7f7;font-family:inherit;font-size:.9rem;padding:.45rem .6rem}\n'+
   '.ptt{border-radius:.4em;padding:.25rem .55rem;margin-left:.4rem;background:#d11534;color:#f7f7f7;font-size:.78rem;font-weight:700}\n'+
   /* Flex jako przycisk-ikona (power) w wierszu TRX; kolor = stan (zolty gdy WL) */
-  '.flx{display:inline-flex;align-items:center;gap:.4rem;margin-left:auto;border:none;border-radius:.4em;background:#2a5d6b;color:#a7b9be;font-family:inherit;font-size:.85rem;font-weight:700;padding:.4rem .7rem;cursor:pointer}\n'+
-  '.flx svg{width:15px;height:15px;flex:0 0 auto}\n'+
+  '.flx{display:inline-flex;align-items:center;justify-content:center;margin-left:auto;border:none;border-radius:.4em;background:#2a5d6b;color:#a7b9be;padding:.4rem .55rem;cursor:pointer}\n'+
+  '.flx svg{width:15px;height:15px}\n'+
   '.flx:hover{outline:2px solid #a7b9be}\n'+
   '.flx.on{background:#f5d33c;color:#162f36}\n'+
   /* karta Settings jako natywny <details> - zwijana, bez JS */
@@ -158,7 +158,7 @@ const DEVICE_CSS =
   '.rows .row{display:flex;justify-content:space-between;padding:.35rem 0}\n'+
   '.rows span{color:#a7b9be}strong.warn{color:#d11534}\n'+
   'a{color:#a7b9be;font-weight:600;text-decoration:none;font-size:.85rem}\n'+
-  '@media(max-width:520px){.tb{font-size:.95rem;padding:.7rem max(.85rem,env(safe-area-inset-right)) .7rem max(.85rem,env(safe-area-inset-left))}.astat{min-width:0;flex:1 1 100%}.bcd,.bcdr{min-width:0;margin-right:.2rem;font-size:.82rem;padding:.35rem .55rem}input[type=submit],.flx{min-width:2.75rem;min-height:2.75rem;padding:.45rem .55rem;margin:.15rem}.flx svg{width:18px;height:18px}.trx{gap:.25rem;padding:.65rem 0}.nm{flex-wrap:wrap}}\n';
+  '@media(max-width:520px){.tb{font-size:.95rem;padding:.7rem max(.85rem,env(safe-area-inset-right)) .7rem max(.85rem,env(safe-area-inset-left))}.astat{min-width:0;flex:1 1 100%}.bcd,.bcdr{min-width:0;flex-basis:100%;margin-right:.2rem;font-size:.82rem;padding:.35rem .55rem}input[type=submit],.flx{min-width:2.75rem;min-height:2.75rem;padding:.45rem .55rem}.flx svg{width:18px;height:18px}.trx{gap:.5rem;padding:.65rem 0}.nm{flex-wrap:wrap}}\n';
 
 // Ikona power (wlacz/wylacz) - dziedziczy kolor przez currentColor (dim gdy off, ciemny na zoltym gdy on)
 const POWER_SVG =
