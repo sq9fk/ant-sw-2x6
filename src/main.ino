@@ -515,8 +515,6 @@ void setup()
 #if defined(OTRSP_TCP)
   otrspServer.begin();      // surowy TCP dla OTRSP (OTRSP_TCP_PORT)
 #endif
-  Serial.print(F("server is at "));
-  Serial.println(Ethernet.localIP());
   lcd.setCursor(1, Ports / 2 - 1);
   lcd.print(F("IP address:"));
   lcd.setCursor(1, Ports / 2);
