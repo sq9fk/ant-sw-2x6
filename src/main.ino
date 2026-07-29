@@ -455,7 +455,7 @@ void setup()
   }
   lcd.begin(16, Ports);
   lcd.setCursor(0, Ports / 2 - 1);
-  lcd.print(F("      SQ9FK"));
+  lcd.print(siteName());   // SQ9FK: nazwa stacji (edytowalna przez WWW/EEPROM) zamiast "SQ9FK" na sztywno
   lcd.setCursor(1, Ports / 2);
   lcd.print(Inputs);
   lcd.setCursor(2, Ports / 2);
