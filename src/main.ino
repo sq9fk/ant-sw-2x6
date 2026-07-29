@@ -81,12 +81,12 @@
 
 // Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 nieedytowalny (OFF); 7 = sentinel trybu BCD.
 const char ant_0[] PROGMEM = "OFF";          // <-- do not change this line
-const char ant_1[] PROGMEM = "160m INV-V";
-const char ant_2[] PROGMEM = "80m Dipole";
-const char ant_3[] PROGMEM = "Delta 80/40";
-const char ant_4[] PROGMEM = "GXP11 40";
-const char ant_5[] PROGMEM = "GXP11 20/10";
-const char ant_6[] PROGMEM = "UB50";
+const char ant_1[] PROGMEM = "ANT1";
+const char ant_2[] PROGMEM = "ANT2";
+const char ant_3[] PROGMEM = "ANT3";
+const char ant_4[] PROGMEM = "ANT4";
+const char ant_5[] PROGMEM = "ANT5";
+const char ant_6[] PROGMEM = "ANT6";
 #if defined(BCD_INPUT)
 // SQ9FK: poz. 7 = sentinel trybu BCD ("M-off->BCD"), osiagalna tylko przy BCD_INPUT (enkoder 0..7).
 // Sentinel przesuniety z 8 na 7 -> zlikwidowana martwa luka (dawna poz. 7 po usunietej 7. antenie).
@@ -101,7 +101,7 @@ const char* const antDefault[] PROGMEM = {
 // SQ9FK: dwa niezalezne wyjscia Radio Flex na GPA7 (K1/J7) i GPB7 (K2/J6) - dawniej przekaznik
 // pasma GXP11 40m. Sterowane osobnymi ikonami power w wierszach TRX (WWW), bez nazw.
 // Domyslna nazwa stacji (topbar), edytowalna przez WWW i zapisywana w EEPROM:
-const char siteDefault[] PROGMEM = "SP9PDF";
+const char siteDefault[] PROGMEM = "SQ9FK";
 #if defined(WEB_ANT_NAMES)
   #include <EEPROM.h>
   #define ANT_EE_MAGIC  0xA5                         // magic sekcji nazw anten 1..6 (bez zmian -> nazwy zachowane)
@@ -1228,7 +1228,7 @@ static void OTRSP_parse(char *cmd, Print &out) {
 
         // Return the SO2R device's name
         if (QCOMPARE("NAME")) {
-            out.print(F("NAME2x6SP9PDFRemoteAntennaSwitch\r"));
+            out.print(F("NAME2x6SQ9FKRemoteAntennaSwitch\r"));
             return;
         }
 
