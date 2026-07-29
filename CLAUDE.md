@@ -21,7 +21,7 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` (strona WWW) i `OTRSP` trzymać
   osobno (wykluczają się rozmiarowo — `#error` w kodzie pilnuje tego w compile-time). Domyślnie:
-  **Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WEB_ANT_NAMES
+  **Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES
   WŁ.** — Flash **97,1%** / RAM **48,2%**. Flash **prawie pełny** (~900 B wolne — skrajnie ciasno).
   Build z **BCD+PTT+Ethernet już się NIE mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź
   CSS/markup, generuj w pętli zamiast rozwijać kod).
@@ -58,7 +58,7 @@ Wykrywanie kolizji między TRX działa zawsze.
   i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa stacji,
   nazwy anten, ukryte napięcie). **Flash prawie pełny — przy zmianach HTML/CSS pilnuj budżetu.**
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
-  bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WEB_ANT_NAMES` też
+  bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WWW_EEPROM_NAMES` też
   `N{k}={nazwa}` (antena), `NS={nazwa}` (nazwa stacji), `N{I|G|M|D}={a.b.c.d}` (IP/gateway/maska/
   DNS) od `reqBuf[6]`), z walidacją cyfr i
   `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +
@@ -80,7 +80,7 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 
 ## Funkcje opcjonalne (#ifdef, na górze src/main.ino)
 
-- `WEB_ANT_NAMES` (WŁ.): nazwy anten 1–6 w RAM (`antRAM[8][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`) oraz
+- `WWW_EEPROM_NAMES` (WŁ.): nazwy anten 1–6 w RAM (`antRAM[8][ANT_MAXLEN+1]`, `ANT_MAXLEN=11`) oraz
   **nazwa stacji** w `siteRAM[…]` (topbar), ładowane z EEPROM (`loadAntNames()`), edytowane przez
   WWW w karcie **Settings** (formularze `/?N{k}={nazwa}` i `/?NS={nazwa}`, wspólny `parseName(q, dst)`
   z dekodowaniem URL i twardym limitem długości), zapis `saveAntNames()` (EEPROM.update). Przy
@@ -112,7 +112,7 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
   Kolumny: `{adres_I2C, wybrana_antena, PTT, kolizja, tryb_ręczny, część(bank)}`.
 - **Konfiguracja przez `#define`** na początku pliku: `Ports` (2 lub 4), `Inputs`,
   `inputHigh`, `SERBAUD`, `EthModule`, `__USE_DHCP__`, `OTRSP`/`OTRSP_DEBUG`/`OTRSP_TCP`/
-  `OTRSP_TCP_PORT` oraz flagi funkcji `WEB_ANT_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN`
+  `OTRSP_TCP_PORT` oraz flagi funkcji `WWW_EEPROM_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN`
   (patrz „Funkcje opcjonalne").
 - **I²C / MCP23017**: `0x20`/`0x22` = wyjścia, `0x21`/`0x23` = wejścia (patrz
   `docs/CONNECTIONS.md`). Rejestry GPIOA=0x12, GPIOB=0x13.
@@ -128,7 +128,7 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
   odłączona, przycisk „-"/enkoder 0). Indeks 7 = "M-off->BCD" (**sentinel trybu BCD**), osiągalny
   tylko przy `BCD_INPUT` (enkoder 0..7) — **pod `#ifdef BCD_INPUT`** (def., `antDefault[]`, `antRAM[7]`);
   bez tej flagi nie istnieje, nie zajmuje flash. `antRAM` ma rozmiar `[8]` (0..7). Sentinel przesunięty
-  z 8 na 7 → **zlikwidowana martwa luka** (dawna poz. 7). Przy `WEB_ANT_NAMES` nazwy 1–6 są w `antRAM[]` (EEPROM), czytane przez
+  z 8 na 7 → **zlikwidowana martwa luka** (dawna poz. 7). Przy `WWW_EEPROM_NAMES` nazwy 1–6 są w `antRAM[]` (EEPROM), czytane przez
   `antName()`. **Nazwa stacji** (topbar): `siteDefault` PROGMEM / `siteRAM[]` (EEPROM), przez `siteName()`.
 
 ## Modyfikacje SQ9FK — o czym pamiętać

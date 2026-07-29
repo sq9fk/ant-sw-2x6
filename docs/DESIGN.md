@@ -25,7 +25,7 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `Inputs` | 6 | liczba anten (etykieta „6x2") |
 | `EthModule` | **wł.** | Ethernet W5500 + serwer WWW |
 | `__USE_DHCP__` | **wył.** | DHCP dla Ethernetu (koszt ~3,8 KB flash z oficjalną biblioteką — domyślnie static IP) |
-| `WEB_ANT_NAMES` | **wł.** | edycja nazw anten przez WWW + zapis EEPROM |
+| `WWW_EEPROM_NAMES` | **wł.** | edycja nazw anten przez WWW + zapis EEPROM |
 | `ANT_MAXLEN` | 11 | limit długości nazwy anteny (szerokość LCD) |
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
@@ -154,10 +154,10 @@ i kończy (`delay(1); client.stop()`).
   `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
 - `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
-- *(opcja `WEB_ANT_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
+- *(opcja `WWW_EEPROM_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
-- *(opcja `WEB_ANT_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
-- *(opcja `WEB_ANT_NAMES`)* `N{I|G|M|D}={a.b.c.d}` — **konfiguracja sieciowa** (IP/gateway/maska/DNS)
+- *(opcja `WWW_EEPROM_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
+- *(opcja `WWW_EEPROM_NAMES`)* `N{I|G|M|D}={a.b.c.d}` — **konfiguracja sieciowa** (IP/gateway/maska/DNS)
   zamiast na sztywno w kodzie. `parseIPField()` kopiuje wartość do bufora i woła
   `IPAddress::fromString()` (biblioteka Arduino — nie własny parser); parsuje do zmiennej
   tymczasowej, commituje do żywej `ip`/`gateway`/`subnet`/`myDns` tylko gdy poprawny adres
@@ -194,8 +194,8 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
   odłączona). Indeks `7` = `M-off->BCD` (**sentinel trybu BCD**) osiągalny **tylko przy `BCD_INPUT`**
   (enkoder 0..7) — pod `#ifdef`, w domyślnym buildzie nie istnieje i nie zajmuje flash. Sentinel
   przesunięty z 8 na 7 → **zlikwidowana martwa luka** po usuniętej 7. antenie (`antRAM` = `[8]`);
-  domyślna nazwa stacji: `siteDefault` (`"SP9PDF"`). Radio Flex nie ma nazw (same ikony power).
-- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[8][ANT_MAXLEN+1]` oraz **nazwa stacji** w
+  domyślna nazwa stacji: `siteDefault` (`"SQ9FK"`). Radio Flex nie ma nazw (same ikony power).
+- Przy `WWW_EEPROM_NAMES`: nazwy anten 1–6 w RAM `antRAM[8][ANT_MAXLEN+1]` oraz **nazwa stacji** w
   `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
   Zapis `saveAntNames()` używa `EEPROM.update` (mniejsze zużycie komórek).
 - Przy `EthModule`/`OTRSP_TCP`: **konfiguracja sieciowa** (IP/gateway/maska/DNS) też w EEPROM,
@@ -256,7 +256,7 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 | `EthModule` \| `OTRSP_TCP` | mac/ip/gateway/subnet + DHCP+fallback w `setup()`, `Ethernet.maintain()` w `loop()` — **wspólne** dla obu |
 | `EthModule` | `server(80)`, `HTTP_HEAD*`, `POWER_SVG`, `BufP`, sekcja serwera WWW w `loop()` |
 | `OTRSP_TCP` | `otrspServer`/`otrspClient`/`otrsp_tcp_buf`/`otrsp_tcp_len`, sekcja „OTRSP TCP" w `loop()` |
-| `WEB_ANT_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
+| `WWW_EEPROM_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
 | `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „7" w `show()`, cała funkcja `rx()` |
 | `PTT_BLOCKING` | warunki `if(port[i][2]==0)` w `loop()`, plakietka PTT w `show()` i WWW, odczyt PTT w `rx()` |
 | `OTRSP` | deklaracja `in_buf`/`in_len`, wywołanie w `loop()` (USB), `OTRSP_parse(char*,Print&)`, `serialEvent()` |

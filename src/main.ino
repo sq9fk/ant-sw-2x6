@@ -76,7 +76,7 @@
 // ---- Funkcje opcjonalne (SQ9FK) -------------------------------------------
 //#define BCD_INPUT        // automatyczny wybor anteny z BCD radia (wejscia MCP IN) - WYLACZONE
 //#define PTT_BLOCKING     // odczyt PTT + blokada przelaczania podczas TX - WYLACZONE
-#define WEB_ANT_NAMES      // edycja nazw anten przez WWW + zapis w EEPROM (wymaga EthModule)
+#define WWW_EEPROM_NAMES      // edycja nazw anten, stacji, IP/gateway/maski/DNS przez WWW + zapis w EEPROM (wymaga EthModule)
 #define ANT_MAXLEN 11      // limit dlugosci nazwy anteny (mieści sie na LCD: LCDculumn-5)
 
 // Domyslne nazwy anten (zrodlo inicjalizacji). Indeks 0 nieedytowalny (OFF); 7 = sentinel trybu BCD.
@@ -102,7 +102,7 @@ const char* const antDefault[] PROGMEM = {
 // pasma GXP11 40m. Sterowane osobnymi ikonami power w wierszach TRX (WWW), bez nazw.
 // Domyslna nazwa stacji (topbar), edytowalna przez WWW i zapisywana w EEPROM:
 const char siteDefault[] PROGMEM = "SQ9FK";
-#if defined(WEB_ANT_NAMES)
+#if defined(WWW_EEPROM_NAMES)
   #include <EEPROM.h>
   #define ANT_EE_MAGIC  0xA5                         // magic sekcji nazw anten 1..6 (bez zmian -> nazwy zachowane)
   // SQ9FK: sekcja nazwy stacji ma WLASNY magic (za 6 nazwami anten). Dzieki temu przy zachowaniu
@@ -221,7 +221,7 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   IPAddress gateway(192, 168, 5, 254);    // GATE
   IPAddress subnet(255, 255, 255, 0);     // MASK
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
-#if defined(WEB_ANT_NAMES)
+#if defined(WWW_EEPROM_NAMES)
   // SQ9FK: konfiguracja sieciowa (IP/gateway/maska/DNS) edytowalna przez WWW (EthModule) + EEPROM,
   // zamiast na sztywno w kodzie. Ladowana tez dla OTRSP_TCP (bez formularza edycji), gdyby EEPROM
   // mial juz zapisane wartosci z wczesniejszego flashowania wariantu WWW na tym samym urzadzeniu.
@@ -436,10 +436,10 @@ static void OTRSP_parse(char *cmd, Print &out);
 //=================================================================
 void setup()
 {
-#if defined(WEB_ANT_NAMES)
+#if defined(WWW_EEPROM_NAMES)
   loadAntNames();          // SQ9FK: wczytaj nazwy anten z EEPROM (lub domyslne)
 #endif
-#if defined(WEB_ANT_NAMES) && (defined(EthModule) || defined(OTRSP_TCP))
+#if defined(WWW_EEPROM_NAMES) && (defined(EthModule) || defined(OTRSP_TCP))
   loadNetConfig();         // SQ9FK: wczytaj IP/gateway/maske/DNS z EEPROM (lub domyslne) - PRZED Ethernet.begin()
 #endif
   Wire.begin();
@@ -490,7 +490,7 @@ void setup()
   lcd.clear();
 #if defined(EthModule) || defined(OTRSP_TCP)
 // SQ9FK: bring-up sprzetu sieciowego (DHCP+fallback) wspolny dla strony WWW i surowego TCP OTRSP.
-#if defined __USE_DHCP__
+#if defined(__USE_DHCP__)
   // DHCP z ponawianiem (router bywa wolny przy starcie). SQ9FK: oficjalna biblioteka Ethernet
   // przyjmuje timeout jako parametr begin() - 6 s/proba (bylo 60 s domyslne w Ethernet2, wymagalo
   // patchowania Dhcp.h). 3 proby x 6 s = do ~18 s zamiast do 180 s, potem fallback na static IP.
@@ -574,7 +574,7 @@ void loop() {
   }
   //=====[ Ethernet ]=================
 #if defined(EthModule) || defined(OTRSP_TCP)
-#if defined __USE_DHCP__
+#if defined(__USE_DHCP__)
   Ethernet.maintain();   // SQ9FK: odnawianie dzierzawy DHCP (nieblokujace); bez tego IP moze przepasc
 #endif
 #endif
@@ -582,8 +582,8 @@ void loop() {
   EthernetClient client = server.available();
   if (client) {
     // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Dla komend anteny
-    // potrzebne indeksy 7 (bank) i 8-9 (kod); dla edycji nazw (WEB_ANT_NAMES) tez wartosc.
-#if defined(WEB_ANT_NAMES)
+    // potrzebne indeksy 7 (bank) i 8-9 (kod); dla edycji nazw (WWW_EEPROM_NAMES) tez wartosc.
+#if defined(WWW_EEPROM_NAMES)
     char reqBuf[48];
 #else
     char reqBuf[16];
@@ -629,11 +629,11 @@ void loop() {
           out.println(F("<div class=\"wrap\">"));
           // SQ9FK (#5): parsuj prosto z bufora. Zadania:
           //   /?S{bank}{kod}   - wybor anteny / tryb (00..06, 20/21)
-          //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WEB_ANT_NAMES)
-          //   /?NS={nazwa}     - edycja nazwy stacji (topbar)        (WEB_ANT_NAMES)
-          //   /?N{I|G|M|D}={a.b.c.d} - edycja IP/gateway/maski/DNS   (WEB_ANT_NAMES)
+          //   /?N{k}={nazwa}   - edycja nazwy anteny 1..6           (WWW_EEPROM_NAMES)
+          //   /?NS={nazwa}     - edycja nazwy stacji (topbar)        (WWW_EEPROM_NAMES)
+          //   /?N{I|G|M|D}={a.b.c.d} - edycja IP/gateway/maski/DNS   (WWW_EEPROM_NAMES)
           //   /?F{s}{0|1}      - zalaczenie/wylaczenie Flex s=1/2 (GPA7/GPB7)
-#if defined(WEB_ANT_NAMES)
+#if defined(WWW_EEPROM_NAMES)
           if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '6') {
             parseName(reqBuf + 9, antRAM[reqBuf[7] - '0']);   // edycja nazwy anteny + zapis EEPROM
             saveAntNames();
@@ -774,7 +774,7 @@ void loop() {
           out.println(F("</div></section>"));
           // SQ9FK: Settings (zwijane <details>) - nazwa stacji + nazwy anten + ukryte napiecie
           out.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
-#if defined(WEB_ANT_NAMES)
+#if defined(WWW_EEPROM_NAMES)
           // SQ9FK: nazwa stacji -> /?NS={nazwa}
           out.print(F("<div class=\"nm\"><b>Nazwa</b><form method=\"get\" style=\"display:inline\">"
                          "<input name=\"NS\" maxlength=\"11\" size=\"12\" value=\""));

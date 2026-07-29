@@ -42,7 +42,7 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
 - **Nowy wygląd WWW** wg konwencji projektu
   [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge) — ciemny motyw teal, karty,
   statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
-- **Edycja nazw przez WWW** (`WEB_ANT_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
+- **Edycja nazw przez WWW** (`WWW_EEPROM_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
   nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
 - **Konfiguracja sieciowa edytowalna przez WWW** (karta Settings) — **IP, brama, maska, DNS**
   zamiast na sztywno w kodzie; zapisywane w EEPROM (`IPAddress::fromString`, walidacja — błędny
@@ -71,7 +71,7 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   `__USE_DHCP__` z powrotem.
 
 Domyślne nazwy anten są w `antDefault[]`, domyślna nazwa stacji w `siteDefault` (`src/main.ino`).
-Przy włączonym `WEB_ANT_NAMES` nazwa stacji i nazwy anten 1–6 są **edytowalne przez WWW** (karta
+Przy włączonym `WWW_EEPROM_NAMES` nazwa stacji i nazwy anten 1–6 są **edytowalne przez WWW** (karta
 Settings) i zapisywane w EEPROM (patrz niżej).
 
 ## Konfiguracja (dyrektywy `#define`)
@@ -92,7 +92,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 
 | Define          | Domyślnie | Opis                                                    |
 |-----------------|-----------|---------------------------------------------------------|
-| `WEB_ANT_NAMES` | **WŁ.**   | edycja nazwy stacji i nazw anten 1–6 przez WWW (karta Settings), zapis w EEPROM, limit `ANT_MAXLEN` (11 zn.) |
+| `WWW_EEPROM_NAMES` | **WŁ.**   | edycja nazwy stacji i nazw anten 1–6 przez WWW (karta Settings), zapis w EEPROM, limit `ANT_MAXLEN` (11 zn.) |
 | `BCD_INPUT`     | WYŁ.      | automatyczny wybór anteny z BCD radia (wejścia MCP IN); wyłączony = tryb wyłącznie ręczny (WWW/enkoder), bez przełącznika Manual/BCD |
 | `PTT_BLOCKING`  | WYŁ.      | odczyt PTT + blokada przełączania podczas TX + plakietka PTT; wyłączony zgodnie ze zmianą HW (gniazda PTT jako wyjścia) |
 
