@@ -30,7 +30,7 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
 | `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
-| `OTRSP_TCP` | wył. | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`, wyklucza `EthModule` |
+| `OTRSP_TCP` | wył. | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; z `EthModule` mieści się, ale zapas to zaledwie ~6 B |
 | `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 

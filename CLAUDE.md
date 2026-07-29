@@ -19,40 +19,37 @@ Wykrywanie kolizji między TRX działa zawsze.
   `LiquidCrystal` i `Ethernet` (`arduino-libraries/Ethernet`, oficjalna — **NIE** `adafruit/
   Ethernet2`, przestarzała/nieutrzymywana, zastąpiona 2026-07-29) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
-- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` (strona WWW) i `OTRSP` trzymać
-  osobno (wykluczają się rozmiarowo — `#error` w kodzie pilnuje tego w compile-time). Domyślnie:
-  **Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES
-  WŁ.** — Flash **97,1%** / RAM **48,2%**. Flash **prawie pełny** (~900 B wolne — skrajnie ciasno).
-  Build z **BCD+PTT+Ethernet już się NIE mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź
-  CSS/markup, generuj w pętli zamiast rozwijać kod).
+- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
+  już się NIE mieszczą (te opcje tylko bez `EthModule`). Domyślnie: **Ethernet WŁ. (strona WWW,
+  static IP), OTRSP/OTRSP_TCP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES WŁ.** — Flash
+  **97,0%** (29794 B) / RAM **48,2%** (988 B), ~926 B wolne — skrajnie ciasno. Przy dokładaniu
+  do WWW pilnuj budżetu (odchudź CSS/markup, generuj w pętli zamiast rozwijać kod).
   **Oficjalna biblioteka Ethernet jest większa niż Ethernet2** (auto-detekcja W5100/W5200/W5500
   w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP dokłada ~3,8 KB**
   (`Dhcp.cpp`+`EthernetUdp.cpp`), dlatego **wyłączone domyślnie** dla strony WWW (`//#define
   __USE_DHCP__`) — static IP (`ip`/`gateway`/`subnet` w kodzie). Sama strona WWW (HTML/CSS/
-  `BufP`/print-y) kosztuje dodatkowo ~8 KB — nie sam Ethernet. Zmierzone: Ethernet bez DHCP i bez
-  strony WWW = ~72,5% (22270 B); + OTRSP (serial) = ~74,1%; + `OTRSP_TCP` z DHCP wł. = **82,8%**
-  (ma zapas, DHCP tu można zostawić włączone).
-  **`OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) sa NIEZALEZNE** — kazdy moze byc wlaczony osobno
+  `BufP`/print-y) kosztuje dodatkowo ~8 KB — nie sam Ethernet.
+  **`OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) SA NIEZALEZNE** — kazdy moze byc wlaczony osobno
   albo razem (wspolny `OTRSP_parse(char*, Print&)` kompiluje sie przy `#if defined(OTRSP) ||
   defined(OTRSP_TCP)`; `serialEvent()`/`in_buf` zostaja pod samym `OTRSP`, bo sa specyficzne dla
   USB). Serial i EthernetClient dziedzicza po `Print` — nie duplikuj logiki komend przy zmianach.
-  **Piec wariantow** (`#error` wymusza wykluczenie tylko WSZYSTKICH TRZECH naraz): (1) `EthModule`
-  — strona WWW (static IP), 97,0%; (2) `EthModule`+`OTRSP` — strona WWW + OTRSP po USB, **98,7%**
-  (zapas ~410 B); (3) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **100,0% — zapas
-  ZALEDWIE 6 B** (skrajnie ciasne; przy jakiejkolwiek zmianie w kodzie WWW/CSS/OTRSP_TCP buduj
-  TEN wariant jako pierwszy, bo najlatwiej go zepsuc); (4) `OTRSP` — OTRSP tylko po USB, bez
-  Ethernetu, ~38% flash; (5) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
-  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **82,5%** flash z DHCP
-  wlaczonym. **`EthModule`+`OTRSP`+`OTRSP_TCP` (wszystkie trzy naraz) NIE miesci sie** (brakuje
-  ~116 B) — to jedyna blokowana kombinacja. Uwaga: `DNSClient::getHostByName`/wirtualna metoda
-  `connect(hostname)` w `EthernetClient` (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje
-  cala tabele wirtualna) to koszt JUZ OBECNY w domyslnym buildzie WWW (97,0%) — nie jest to
-  specyficzne dla `OTRSP_TCP`, wiec nie tlumaczyl niedoboru bajtow przy tym wariancie (bledny
-  trop z wczesniejszej analizy). Rzeczywisty powod niedoboru: kod `OTRSP_TCP` (parser+bufor+
-  petla) wazy ~968 B, a domyslny build ma tylko ~926 B zapasu — brakujace 42 B odzyskano
-  poprawka logiki reconnect w bloku "OTRSP TCP" (`.stop()` na starym polaczeniu przy zastapieniu
-  nowym klientem zamiast `otrspClient = EthernetClient()`, patrz `loop()`), przy okazji
-  poprawiajac tez poprawnosc (gniazdo W5500 jest teraz zawsze jawnie zamykane).
+  **Piec wariantow** (`#error` wymusza wykluczenie TYLKO wszystkich trzech naraz —
+  `EthModule`+`OTRSP`+`OTRSP_TCP` razem NIE miesci sie, brakuje ~116 B; kazda inna kombinacja
+  dziala): (1) `EthModule` — strona WWW (static IP), 97,0% (29794 B); (2) `EthModule`+`OTRSP` —
+  strona WWW + OTRSP po USB, **98,7%** (30310 B, zapas ~410 B); (3) `EthModule`+`OTRSP_TCP` —
+  strona WWW + OTRSP po TCP, **100,0%** (30714 B) **— zapas ZALEDWIE 6 B** (skrajnie ciasne;
+  przy jakiejkolwiek zmianie w kodzie WWW/CSS/OTRSP_TCP buduj TEN wariant jako pierwszy, bo
+  najlatwiej go zepsuc); (4) `OTRSP` — OTRSP tylko po USB, bez Ethernetu, ~38% (11634 B); (5)
+  `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534)
+  jednoczesnie, bez strony WWW, **82,5%** (25330 B) z DHCP wlaczonym (ma zapas ~5,3 KB, mozna
+  zostawic wlaczone). Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w
+  `EthernetClient` (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna)
+  to koszt JUZ OBECNY w domyslnym buildzie WWW (97,0%) — nie jest to specyficzne dla `OTRSP_TCP`.
+  Rzeczywisty powod niedoboru bajtow przy WWW+OTRSP_TCP: kod `OTRSP_TCP` (parser+bufor+petla)
+  wazy ~968 B, a domyslny build ma tylko ~926 B zapasu — brakujace 42 B odzyskano poprawka
+  logiki reconnect w bloku "OTRSP TCP" (`.stop()` na starym polaczeniu przy zastapieniu nowym
+  klientem zamiast `otrspClient = EthernetClient()`, patrz `loop()`), przy okazji poprawiajac
+  tez poprawnosc (gniazdo W5500 jest teraz zawsze jawnie zamykane).
 - **Konfiguracja sieciowa edytowalna przez WWW** (`netCfg[4]` = wskaźniki na `ip/gateway/subnet/
   myDns`, `loadNetConfig()`/`saveNetConfig()`, `parseIPField()` używa `IPAddress::fromString` —
   **nie pisz własnego parsera dotted-decimal**, biblioteka go ma). IP nie są już „na sztywno" —

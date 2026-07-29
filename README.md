@@ -74,8 +74,8 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   przestarzała/nieutrzymywana). Kosztuje więcej flash niż Ethernet2 (obsługa W5100/W5200/W5500
   z auto-detekcją chipu w runtime, niewyłączalna `#define`m), stąd **DHCP wyłączone domyślnie**
   (sam koszt DHCP+UDP to ~3,8 KB) — strona WWW działa na **static IP** (ustaw `ip`/`gateway`/
-  `subnet` w `src/main.ino` pod docelową sieć). Warianty z zapasem (np. `OTRSP_TCP`) mogą włączyć
-  `__USE_DHCP__` z powrotem.
+  `subnet` w `src/main.ino` pod docelową sieć). Warianty bez strony WWW (np. `OTRSP`+`OTRSP_TCP`
+  razem, bez `EthModule` — ~82,5% flash) mają zapas i mogą włączyć `__USE_DHCP__` z powrotem.
 
 Domyślne nazwy anten są w `antDefault[]`, domyślna nazwa stacji w `siteDefault` (`src/main.ino`).
 Przy włączonym `WWW_EEPROM_NAMES` nazwa stacji i nazwy anten 1–6 są **edytowalne przez WWW** (karta
@@ -89,7 +89,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
 | `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
 | `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | WYŁ.      | surowy TCP dla OTRSP — niezależne od `OTRSP`, wyklucza `EthModule` |
+| `OTRSP_TCP`     | WYŁ.      | surowy TCP dla OTRSP — niezależne od `OTRSP`; z `EthModule` mieści się, ale zapas to zaledwie ~6 B |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
 | `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW                        |
