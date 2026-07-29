@@ -1055,32 +1055,18 @@ static void OTRSP_parse() {
 
         // Return AUX1 value
         if (QCOMPARE("AUX1")) {
-            Serial.print("AUX1");
-            if (port[4][1] >= 10) {
-                Serial.print(1);
-                Serial.print(port[4][1]-10);
-                Serial.print(0);
-            }
-            else {
-                Serial.print(port[4][1]);
-                Serial.print(0);
-            }
+            // SQ9FK: sama wartosc dziesietna (bylo: dopisywane zbedne "0" -> np. 3 stawalo sie "30",
+            // co lamalo round-trip AUXn -> ?AUXn niezgodnie ze specyfikacja OTRSP).
+            Serial.print(F("AUX1"));
+            Serial.print(port[4][1]);
             Serial.print('\r');
             return;
         }
 
         // Return AUX2 value
         if (QCOMPARE("AUX2")) {
-            Serial.print("AUX2");
-            if (port[5][1] >= 10) {
-                Serial.print(1);
-                Serial.print(port[5][1]-10);
-                Serial.print(0);
-            }
-            else {
-                Serial.print(port[5][1]);
-                Serial.print(0);
-            }
+            Serial.print(F("AUX2"));
+            Serial.print(port[5][1]);
             Serial.print('\r');
             return;
         }
@@ -1169,22 +1155,19 @@ static void OTRSP_parse() {
 
 void serialEvent() {
   while (Serial.available()) {
-    // get the new byte:
     char inChar = (char)Serial.read();
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
-    if (inChar == '\n') {
+    // SQ9FK: OTRSP konczy komendy znakiem CR (\r, wg specyfikacji), NIE LF (\n) - bylo odwrotnie,
+    // wiec parser nigdy nie widzial konca komendy od zgodnego z protokolem klienta (np. N1MM+).
+    if (inChar == '\r') {
       in_buf[in_len] = '\0';
       in_len = 0;
       stringComplete = true;
-    }
-    else {
-      // add it to the inputString:
+    } else if (inChar == '\n') {
+      // SQ9FK: ignoruj samotny LF (niektore programy wysylaja CRLF) - CR juz zakonczyl komende.
+    } else if (in_len < sizeof(in_buf) - 1) {
+      // SQ9FK: zabezpieczenie przed przepelnieniem in_buf (bylo bez kontroli granic - OOB write).
       in_buf[in_len++] = inChar;
     }
-    
-    // if the incoming character is a newline, set a flag
-    // so the main loop can do something about it:
   }
 }
 #endif

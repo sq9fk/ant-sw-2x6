@@ -113,6 +113,10 @@ nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
 - **(opcja) BCD:** `rx()` czyta 4-bit BCD z ekspandera IN, dekoduje przez `BCDmatrixOUT[2][16]`
   (PROGMEM) → numer anteny.
 - **(opcja) OTRSP:** `AUX1n`/`AUX2n` ustawiają antenę TRX1/TRX2; `?AUX1/?AUX2/?NAME/?` — zapytania.
+  Zgodnie ze specyfikacją [OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf) komendy kończy
+  znak **CR (`\r`)** — `serialEvent()` terminuje na `\r` (LF ignorowany, na wypadek CRLF), z
+  kontrolą granic `in_buf`. Odpowiedzi `?AUX1`/`?AUX2` zwracają samą wartość dziesiętną (bez
+  dopełnień) — zgodny round-trip `AUXn` → `?AUXn`.
 
 ## 7. Serwer WWW (przy `EthModule`)
 
