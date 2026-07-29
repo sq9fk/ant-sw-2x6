@@ -18,13 +18,18 @@ Wykrywanie kolizji między TRX działa zawsze.
   `nanoatmega328new` = nowy). Wgranie: `pio run -t upload`. Monitor: 9600 8N1.
   `LiquidCrystal` i `Ethernet2` (`adafruit/Ethernet2`, W5500) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
-- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` i `OTRSP` trzymać osobno
-  (wykluczają się rozmiarowo). Domyślnie: **Ethernet WŁ., OTRSP WYŁ., BCD/PTT WYŁ.,
-  WEB_ANT_NAMES WŁ.** — Flash **98,0%** / RAM **45,6%** (WWW + buforowanie + odporny start DHCP).
-  Flash **prawie pełny** (~600 B wolne). Build z **BCD+PTT+Ethernet już się NIE mieści** (~102%) —
-  te opcje bez `EthModule`.
-  Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup). `OTRSP_parse()`/`serialEvent()` są pod
-  `#if defined(OTRSP)`; włączenie OTRSP wymaga wyłączenia `EthModule`.
+- **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` (strona WWW) i `OTRSP` trzymać
+  osobno (wykluczają się rozmiarowo — `#error` w kodzie pilnuje tego w compile-time). Domyślnie:
+  **Ethernet WŁ. (strona WWW), OTRSP WYŁ., BCD/PTT WYŁ., WEB_ANT_NAMES WŁ.** — Flash **99,7%** /
+  RAM **45,6%**. Flash **prawie pełny** (~94 B wolne). Build z **BCD+PTT+Ethernet już się NIE
+  mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup).
+  **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y) — nie sam Ethernet+DHCP.
+  Zmierzone: Ethernet+DHCP bez strony WWW = ~72,5% (22270 B); + OTRSP (serial) = ~74,1%.
+  **Trzy warianty** (`#error` wymusza wykluczenie): (1) `EthModule` — strona WWW; (2) `OTRSP` —
+  OTRSP tylko po USB, bez Ethernetu, ~38% flash; (3) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i**
+  surowym TCP (`OTRSP_TCP_PORT`, domyślnie 4534) jednocześnie, Ethernet+DHCP bez strony WWW,
+  ~76% flash, ~7,5 KB zapasu. `OTRSP_parse(char*, Print&)` jest wspólny dla obu kanałów (Serial
+  i EthernetClient dziedziczą po `Print`) — nie duplikuj logiki komend przy zmianach.
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
   przez `memcpy_P`); `BCDmatrixOUT` w `PROGMEM` (`pgm_read_byte`, tylko przy `BCD_INPUT`);
   `port[8][6]` jest `byte`; nazwy anten patrz „Funkcje opcjonalne". Bloki WWW (przyciski
@@ -88,13 +93,19 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 - **Model stanu**: tablica `port[8][6]` — wiersze 0–3 = wejścia TRX1–4, 4–7 = wyjścia.
   Kolumny: `{adres_I2C, wybrana_antena, PTT, kolizja, tryb_ręczny, część(bank)}`.
 - **Konfiguracja przez `#define`** na początku pliku: `Ports` (2 lub 4), `Inputs`,
-  `inputHigh`, `SERBAUD`, `EthModule`, `__USE_DHCP__`, `OTRSP`/`OTRSP_DEBUG` oraz flagi funkcji
-  `WEB_ANT_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN` (patrz „Funkcje opcjonalne").
+  `inputHigh`, `SERBAUD`, `EthModule`, `__USE_DHCP__`, `OTRSP`/`OTRSP_DEBUG`/`OTRSP_TCP`/
+  `OTRSP_TCP_PORT` oraz flagi funkcji `WEB_ANT_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN`
+  (patrz „Funkcje opcjonalne").
 - **I²C / MCP23017**: `0x20`/`0x22` = wyjścia, `0x21`/`0x23` = wejścia (patrz
   `docs/CONNECTIONS.md`). Rejestry GPIOA=0x12, GPIOB=0x13.
 - **Kluczowe funkcje**: `tx()` (one-hot na przekaźniki), `show()` (rysowanie linii LCD),
   `encI()`/`enc2()` (enkoder na przerwaniu). Opcjonalnie: `rx()` (BCD+PTT, tylko `BCD_INPUT`),
-  `OTRSP_parse()` (SO2R, tylko `OTRSP`).
+  `OTRSP_parse(char *cmd, Print &out)` (SO2R, tylko `OTRSP`) — wywoływany z dwóch niezależnych
+  miejsc: `loop()` dla USB (`OTRSP_parse(in_buf, Serial)`, bufor/terminator w `serialEvent()`)
+  i — przy `OTRSP_TCP` — z bloku „OTRSP TCP" w `loop()` (`OTRSP_parse(otrsp_tcp_buf, otrspClient)`,
+  własny bufor `otrsp_tcp_buf`/`otrsp_tcp_len`). Połączenie TCP jest **trwałe** (klient trzymany
+  w `otrspClient` między iteracjami `loop()`), inaczej niż serwer WWW (request/response,
+  łączy-odpowiada-zamyka) — nie kopiuj wzorca WWW przy zmianach w tym bloku.
 - **Nazwy anten**: domyślne w `antDefault[]` PROGMEM. Indeks 0="OFF" = **wybieralny zawsze** (antena
   odłączona, przycisk „-"/enkoder 0). Indeks 7 = "M-off->BCD" (**sentinel trybu BCD**), osiągalny
   tylko przy `BCD_INPUT` (enkoder 0..7) — **pod `#ifdef BCD_INPUT`** (def., `antDefault[]`, `antRAM[7]`);

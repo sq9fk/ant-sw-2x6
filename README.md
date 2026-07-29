@@ -44,9 +44,14 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
 - **Edycja nazw przez WWW** (`WEB_ANT_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
   nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
-- **Sterowanie OTRSP** (SO2R) — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`
-  (`2x6SP9PDFRemoteAntennaSwitch`), zgodne m.in. z N1MM+. **Opcjonalne** (`OTRSP`), domyślnie
-  wyłączone — wyklucza się rozmiarowo z Ethernetem.
+- **Sterowanie OTRSP** (SO2R, zgodne z [protokołem OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf))
+  — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`/`?`, zgodne m.in. z N1MM+. Komendy
+  kończy CR (`\r`), zgodnie ze specyfikacją. **Opcjonalne** (`OTRSP`), domyślnie wyłączone —
+  wyklucza się rozmiarowo ze stroną WWW (`EthModule`).
+  Dodatkowa opcja **`OTRSP_TCP`** (wymaga `OTRSP`, wyklucza się z `EthModule`) udostępnia OTRSP
+  jednocześnie po USB **i** po surowym gnieździe TCP (`OTRSP_TCP_PORT`, domyślnie 4534) — bez
+  strony WWW, ale z Ethernetem/DHCP. Sam parser komend jest wspólny dla obu kanałów
+  (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania — **nieblokujące**
@@ -67,6 +72,8 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | liczba par IN/OUT i linii LCD (2)                           |
 | `inputHigh`     | poziom aktywny wejść (HIGH — domyślnie)                     |
 | `OTRSP`         | włącza sterowanie OTRSP po porcie szeregowym                |
+| `OTRSP_TCP`     | + surowy TCP dla OTRSP (wymaga `OTRSP`, wyklucza `EthModule`) |
+| `OTRSP_TCP_PORT`| port surowego TCP dla OTRSP (domyślnie 4534)                |
 | `SERBAUD`       | prędkość portu szeregowego (9600)                           |
 | `EthModule`     | włącza moduł Ethernet + interfejs WWW                       |
 | `__USE_DHCP__`  | DHCP dla modułu Ethernet                                    |
@@ -125,16 +132,21 @@ pio device monitor -b 9600
 w [`platformio.ini`](platformio.ini). Dla wariantu Ethernet (`#define EthModule`
 w `src/main.ino`) odkomentuj tam `arduino-libraries/Ethernet2`.
 
-> **Domyślna konfiguracja: Ethernet WŁ., OTRSP WYŁ.** Build zweryfikowany:
+> **Domyślna konfiguracja: Ethernet WŁ. (strona WWW), OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **98,0%** / 30102 B, RAM **45,6%** / 934 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
-> Flash prawie pełny (~600 B wolne). Wariant **BCD+PTT razem z Ethernetem już się nie mieści**
+> (Flash **99,7%** / 30626 B, RAM **45,6%** / 934 B — domyślne flagi: BCD/PTT wył., nazwy WWW wł.).
+> Flash prawie pełny (~94 B wolne). Wariant **BCD+PTT razem z Ethernetem już się nie mieści**
 > (pełne WWW + odporny start DHCP) — te opcje używać bez `EthModule`.
 >
-> ⚠️ Na Nano (30 KB flash / 2 KB RAM) **Ethernet i OTRSP** najlepiej trzymać osobno.
-> Wybór konfiguracji:
-> - **Ethernet** (obecnie): `#define EthModule`, `//#define OTRSP`
-> - **OTRSP/SO2R**: `//#define EthModule`, `#define OTRSP` → Flash ~40%, RAM ~46%
+> ⚠️ Na Nano (30 KB flash / 2 KB RAM) **strona WWW i OTRSP** najlepiej trzymać osobno — sama
+> strona WWW kosztuje ~8 KB (HTML/CSS/`BufP`), a to ona, nie sam Ethernet+DHCP, zajmuje budżet.
+> Trzy warianty (wzajemnie wykluczające się — patrz `#error` w `src/main.ino`):
+> - **Strona WWW** (obecnie): `#define EthModule`, `//#define OTRSP`, `//#define OTRSP_TCP`
+> - **OTRSP po USB**: `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
+>   → Flash ~38%, RAM ~37%
+> - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
+>   `#define OTRSP`, `#define OTRSP_TCP` → Flash ~76%, RAM ~52% (Ethernet+DHCP bez strony WWW to
+>   tylko ~72% — mnóstwo miejsca na drugie gniazdo TCP)
 
 ### Optymalizacje rozmiaru (zastosowane)
 

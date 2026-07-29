@@ -178,12 +178,25 @@ const char siteDefault[] PROGMEM = "SP9PDF";
 #define inputHigh          // enable input High level (default)
 //#define serialECHO       // enable TX echo on serial port
 //#define OTRSP            // enable serial OTSRP on serial port (disabled to free flash for EthModule)
+// SQ9FK: OTRSP_TCP dodaje surowe gniazdo TCP dla OTRSP obok USB (wymaga OTRSP; wyklucza sie ze
+// strona WWW - EthModule - patrz #error nizej i docs/DESIGN.md). Port dowolny, nie narzucony
+// przez protokol OTRSP.
+//#define OTRSP_TCP
+#define OTRSP_TCP_PORT 4534
 //#define OTRSP_DEBUG
 #define SERBAUD    9600    // [baud] Serial port baudrate
 #define EthModule        // enable Ethernet module
 #define __USE_DHCP__       // Uncoment to Enable DHCP
 //====================================================================
-#if defined(EthModule)
+#if defined(OTRSP_TCP) && !defined(OTRSP)
+  #error "OTRSP_TCP wymaga zdefiniowania OTRSP (surowy TCP to dodatkowy kanal do tego samego parsera)"
+#endif
+#if defined(OTRSP_TCP) && defined(EthModule)
+  #error "OTRSP_TCP wyklucza sie z EthModule (strona WWW) - razem nie miesca sie w flash ATmega328"
+#endif
+// SQ9FK: sprzet sieciowy (W5500/DHCP) potrzebny zarowno dla strony WWW (EthModule) jak i dla
+// surowego TCP OTRSP (OTRSP_TCP) - bring-up jest wspolny, tylko serwer/tresc na porcie sa inne.
+#if defined(EthModule) || defined(OTRSP_TCP)
   #include <util.h>
   #include <Ethernet2.h>
   #include <Dhcp.h>
@@ -193,13 +206,24 @@ const char siteDefault[] PROGMEM = "SP9PDF";
 #include "Wire.h"
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
-#if defined(EthModule)
+#if defined(EthModule) || defined(OTRSP_TCP)
+  // SQ9FK: mac/ip/DHCP-fallback wspolne dla strony WWW (EthModule) i surowego TCP (OTRSP_TCP)
   byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
   IPAddress ip(192, 168, 5, 45);         // IP
   IPAddress gateway(192, 168, 5, 254);    // GATE
   IPAddress subnet(255, 255, 255, 0);     // MASK
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
-  EthernetServer server(80);              // server PORT
+#endif
+#if defined(OTRSP_TCP)
+  // SQ9FK: surowe gniazdo TCP dla OTRSP - trwale polaczenie (nie request/response jak WWW),
+  // klient utrzymywany miedzy iteracjami loop(); wlasny bufor linii, niezalezny od USB (in_buf).
+  EthernetServer otrspServer(OTRSP_TCP_PORT);
+  EthernetClient otrspClient;
+  char otrsp_tcp_buf[64];
+  byte otrsp_tcp_len = 0;
+#endif
+#if defined(EthModule)
+  EthernetServer server(80);              // server PORT (strona WWW)
 
   // SQ9FK: statyczne fragmenty strony w PROGMEM, wysylane jednym sendP() w wiekszych
   // porcjach (mniej zapisow do W5500 -> krotsza transakcja -> mniejsza blokada PTT/switch).
@@ -358,7 +382,7 @@ boolean stringComplete = false;  // whether the string is complete
 #endif
 
 #if defined(OTRSP)
-static void OTRSP_parse();
+static void OTRSP_parse(char *cmd, Print &out);
 #endif
 
 //=================================================================
@@ -413,9 +437,10 @@ void setup()
   lcd.print("V");
   delay(3000);      // pokaz napiecie zasilania na LCD (3 s)
   lcd.clear();
-#if defined(EthModule)
+#if defined(EthModule) || defined(OTRSP_TCP)
+// SQ9FK: bring-up sprzetu sieciowego (DHCP+fallback) wspolny dla strony WWW i surowego TCP OTRSP.
 #if defined __USE_DHCP__
-  // SQ9FK: DHCP z ponawianiem (router bywa wolny przy starcie). Kazda proba begin(mac) czeka
+  // DHCP z ponawianiem (router bywa wolny przy starcie). Kazda proba begin(mac) czeka
   // do 60 s (domyslny timeout Dhcp.h); po 3 nieudanych probach -> fallback na static IP.
   byte dhcpTry = 0;
   while (Ethernet.begin(mac) == 0) {
@@ -432,7 +457,12 @@ void setup()
 #else
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
 #endif
-  server.begin();
+#if defined(EthModule)
+  server.begin();          // strona WWW (port 80)
+#endif
+#if defined(OTRSP_TCP)
+  otrspServer.begin();      // surowy TCP dla OTRSP (OTRSP_TCP_PORT)
+#endif
   Serial.print(F("server is at "));
   Serial.println(Ethernet.localIP());
   lcd.setCursor(1, Ports / 2 - 1);
@@ -448,7 +478,7 @@ void loop() {
     //=====[ OTRSP ]=================
 #if defined(OTRSP)
   if (stringComplete) {
-    OTRSP_parse();
+    OTRSP_parse(in_buf, Serial);   // kanal USB
     stringComplete = false;
   }
 #endif
@@ -493,10 +523,12 @@ void loop() {
     }
   }
   //=====[ Ethernet ]=================
-#if defined(EthModule)
+#if defined(EthModule) || defined(OTRSP_TCP)
 #if defined __USE_DHCP__
   Ethernet.maintain();   // SQ9FK: odnawianie dzierzawy DHCP (nieblokujace); bez tego IP moze przepasc
 #endif
+#endif
+#if defined(EthModule)
   EthernetClient client = server.available();
   if (client) {
     // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Dla komend anteny
@@ -722,6 +754,47 @@ void loop() {
     }
     delay(1);
     client.stop();
+  }
+#endif
+
+#if defined(OTRSP_TCP)
+  //=====[ OTRSP TCP ]=================
+  // SQ9FK: polaczenie TRWALE (nie request/response jak WWW) - klient zostaje podlaczony,
+  // dopoki sam sie nie rozlaczy; komendy moga przychodzic wieloma porcjami w czasie. Wlasny
+  // bufor linii (otrsp_tcp_buf), niezalezny od USB (in_buf) - dwa kanaly dzialaja rownolegle,
+  // bez wzajemnego mieszania komend. Jeden aktywny klient TCP na raz (device dla jednego
+  // operatora/loggera; kolejne przychodzace polaczenie zastapi biezace przy odbiorze danych).
+  if (otrspClient && !otrspClient.connected()) {
+    otrspClient.stop();
+    otrspClient = EthernetClient();     // zerwane polaczenie -> wyczysc powiazany stan
+    otrsp_tcp_len = 0;
+  }
+  {
+    EthernetClient newC = otrspServer.available();   // ma dane do odczytania TERAZ
+    if (newC) {
+      if (!(newC == otrspClient)) {
+        otrspClient = newC;             // inny socket = nowe polaczenie -> czysty bufor
+        otrsp_tcp_len = 0;
+      }
+      int avail = otrspClient.available();
+      int room = (int)sizeof(otrsp_tcp_buf) - 1 - otrsp_tcp_len;
+      if (avail > room) avail = room;
+      if (avail > 0)
+        otrsp_tcp_len += otrspClient.read((uint8_t*)otrsp_tcp_buf + otrsp_tcp_len, avail);
+      otrsp_tcp_buf[otrsp_tcp_len] = '\0';
+      char *cr = (char*)memchr(otrsp_tcp_buf, '\r', otrsp_tcp_len);
+      if (cr) {
+        *cr = '\0';
+        OTRSP_parse(otrsp_tcp_buf, otrspClient);
+        byte consumed = (byte)(cr - otrsp_tcp_buf) + 1;
+        byte remain = otrsp_tcp_len - consumed;
+        if (remain > 0 && cr[1] == '\n') { memmove(cr + 1, cr + 2, --remain); }  // pomin CRLF
+        if (remain > 0) memmove(otrsp_tcp_buf, cr + 1, remain);
+        otrsp_tcp_len = remain;
+      } else if (otrsp_tcp_len >= sizeof(otrsp_tcp_buf) - 1) {
+        otrsp_tcp_len = 0;   // przepelnienie bez CR - porzuc linie (zabezpieczenie)
+      }
+    }
   }
 #endif
 
@@ -1036,27 +1109,30 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
 #endif   // BCD_INPUT
 
 #if defined(OTRSP)
-static void OTRSP_parse() {
+// SQ9FK: parser przyjmuje bufor komendy i cel odpowiedzi (Print&) zamiast na sztywno globalnego
+// in_buf/Serial - dzieki temu ten sam kod obsluguje zarowno USB (Serial) jak i (opcja OTRSP_TCP)
+// surowy klient TCP (EthernetClient), bo oba dziedzicza po Print. Zero duplikacji logiki komend.
+static void OTRSP_parse(char *cmd, Print &out) {
 //----------------------------------------------------------------------
 // Parse and handle a command from the computer
 //----------------------------------------------------------------------
     // Commands are not checked very thoroughly - the computer
     // should not send garbage.
-    
-#define COMPARE(command)  (memcmp_P(in_buf, PSTR(command), \
+
+#define COMPARE(command)  (memcmp_P(cmd, PSTR(command), \
                                     sizeof(command)-1) == 0)
 
-#define QCOMPARE(command) (memcmp_P(in_buf+1, PSTR(command), \
+#define QCOMPARE(command) (memcmp_P(cmd+1, PSTR(command), \
                                     sizeof(command)-1) == 0)
 
 #define AFTER(command) (sizeof(command)-1)
 
 // Handle the queries
-    if (in_buf[0] == '?') {
+    if (cmd[0] == '?') {
 
         // Check for 'ping' - just the ? by itself
-        if (in_buf[AFTER("?")] == '\0') {
-            Serial.print("?\r");
+        if (cmd[AFTER("?")] == '\0') {
+            out.print(F("?\r"));
             return;
         }
 
@@ -1064,95 +1140,45 @@ static void OTRSP_parse() {
         if (QCOMPARE("AUX1")) {
             // SQ9FK: sama wartosc dziesietna (bylo: dopisywane zbedne "0" -> np. 3 stawalo sie "30",
             // co lamalo round-trip AUXn -> ?AUXn niezgodnie ze specyfikacja OTRSP).
-            Serial.print(F("AUX1"));
-            Serial.print(port[4][1]);
-            Serial.print('\r');
+            out.print(F("AUX1"));
+            out.print(port[4][1]);
+            out.print('\r');
             return;
         }
 
         // Return AUX2 value
         if (QCOMPARE("AUX2")) {
-            Serial.print(F("AUX2"));
-            Serial.print(port[5][1]);
-            Serial.print('\r');
+            out.print(F("AUX2"));
+            out.print(port[5][1]);
+            out.print('\r');
             return;
         }
 
         // Return the SO2R device's name
         if (QCOMPARE("NAME")) {
-            Serial.print("NAME2x6SP9PDFRemoteAntennaSwitch\r");
+            out.print(F("NAME2x6SP9PDFRemoteAntennaSwitch\r"));
             return;
         }
 
         // Unknown query command
-        Serial.print(in_buf);
-        Serial.print('\r');
+        out.print(cmd);
+        out.print('\r');
         return;
     }
 
-    // Handle aux output 1 - values are four bits
-    if (COMPARE("AUX1")) {
-        int tmp_aux1 = atoi((char *)&in_buf[AFTER("AUXn")]) & 15;
+    // SQ9FK: AUX1/AUX2 scalone (byly niemal identycznym zdublowanym kodem - rozny tylko indeks
+    // portu). Stara galaz "jesli wartosc sie zmienila" byla martwa (przypisanie tej samej wartosci
+    // jest bezkosztowe, a komentowane efekty uboczne juz nie istnialy) - usunieta.
+    if (COMPARE("AUX1") || COMPARE("AUX2")) {
+        byte idx = (cmd[3] == '2') ? 1 : 0;               // "AUX1"->port[0], "AUX2"->port[1]
+        int val = atoi((char *)&cmd[AFTER("AUXn")]) & 15;
         #if defined(OTRSP_DEBUG)
-          Serial.print("Debug: TX CMD: ");
-          Serial.print(in_buf);
-          Serial.print(" New AUX1 Value: ");
-          Serial.print(tmp_aux1);
-          Serial.print(" Current AUX1 Value: ");
-          Serial.println(port[0][1]);
+          Serial.print(F("Debug: ")); Serial.print(cmd);
+          Serial.print(F(" idx=")); Serial.print(idx);
+          Serial.print(F(" val=")); Serial.println(val);
         #endif
-        if (tmp_aux1 != port[0][1]) {   //SQ9FK: blokada GXP 4<->5 usunieta (6 niezaleznych anten)
-          //port[4][4] = 1;
-          port[0][1] = tmp_aux1;
-          #if defined(OTRSP_DEBUG)
-            Serial.print("Debug: Changing port[4][1]: ");
-            Serial.println(port[0][1]);
-          #endif
-          //tx(port[4][0], 1);
-          #if defined(OTRSP_DEBUG)
-            Serial.print("Debug: Sending I2C port[4][1]: ");
-            Serial.println(port[0][1]);
-          #endif
-          return;
-        }
-        else {
-          #if defined(OTRSP_DEBUG)
-            Serial.println("Debug: New = Old / GXP Collision Error");
-          #endif
-          return;
-        }
-    }
-    
-    // Handle aux output 2 - values are four bits
-    if (COMPARE("AUX2")) {
-        int tmp_aux2 = atoi((char *)&in_buf[AFTER("AUXn")]) & 15;
-        #if defined(OTRSP_DEBUG)
-          Serial.print("Debug: TX CMD: ");
-          Serial.print(in_buf);
-          Serial.print(" New AUX2 Value: ");
-          Serial.print(tmp_aux2);
-          Serial.print(" Current AUX2 Value: ");
-          Serial.println(port[1][1]);
-        #endif
-        if (tmp_aux2 != port[1][1]) {   //SQ9FK: blokada GXP 4<->5 usunieta (6 niezaleznych anten)
-          //port[5][4] = 1;
-          port[1][1] = tmp_aux2;
-          #if defined(OTRSP_DEBUG)
-            Serial.print("Debug: Changing port[1][1]: ");
-            Serial.println(port[1][1]);
-          #endif
-          //tx(port[5][0], 1);
-          #if defined(OTRSP_DEBUG)
-            Serial.println("Debug: Sending I2C");
-          #endif
-          return;
-        }
-        else {
-          #if defined(OTRSP_DEBUG)
-            Serial.println("Debug: New = Old / GXP Collision Error");
-          #endif
-          return;
-        }
+        port[idx][1] = val;
+        return;
     }
 
     // Unknown commands are ignored, as are commands that try to

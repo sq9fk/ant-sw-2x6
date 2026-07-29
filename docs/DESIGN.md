@@ -29,11 +29,16 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `ANT_MAXLEN` | 11 | limit długości nazwy anteny (szerokość LCD) |
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
-| `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym |
+| `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
+| `OTRSP_TCP` | wył. | + surowe gniazdo TCP dla OTRSP (wymaga `OTRSP`, wyklucza `EthModule`) |
+| `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 
-**Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `EthModule` i `OTRSP` nie
-mieszczą się razem — trzymamy je rozłącznie. Domyślnie: Ethernet wł., OTRSP wył.
+**Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `EthModule` (strona WWW) i
+`OTRSP` nie mieszczą się razem — trzymamy je rozłącznie (`#error` w kodzie wymusza to w
+compile-time). Domyślnie: Ethernet wł. (strona WWW), OTRSP wył. **Trzeci wariant** —
+`OTRSP`+`OTRSP_TCP` — daje OTRSP jednocześnie po USB i po surowym TCP, z Ethernetem/DHCP, ale
+**bez strony WWW** (patrz §6, §9).
 
 ## 3. Model stanu — `port[8][6]`
 
@@ -62,7 +67,8 @@ używane są `0x20`/`0x21`.
 
 Kolejność w każdej iteracji:
 
-1. **(opcja) OTRSP** — jeśli przyszła kompletna komenda serial, `OTRSP_parse()`.
+1. **(opcja) OTRSP przez USB** — jeśli przyszła kompletna komenda serial (`serialEvent()`,
+   terminator CR), `OTRSP_parse(in_buf, Serial)`.
 2. **GPIO / logika przełączania** — dla każdego TRX `i`:
    - *(opcja `BCD_INPUT`)* jeśli tryb auto → `rx()` czyta antenę z BCD radia;
    - **wykrywanie kolizji**: licznik `c` porównuje `port[i][1]` (żądanie) z `port[j+4][1]`
@@ -70,8 +76,9 @@ Kolejność w każdej iteracji:
    - jeśli kolizja → `port[i][3]=1`, wyjście OFF; inaczej → wyjście = żądanie
      *(przy `PTT_BLOCKING` przełączenie wstrzymane, gdy PTT aktywne)*;
    - `tx()` wystawia wyjścia na ekspander OUT.
-3. **(opcja) Serwer WWW** — `Ethernet.maintain()` (odnawianie dzierżawy DHCP) + obsługa jednego
-   klienta (patrz §7).
+3. **(opcja `EthModule`/`OTRSP_TCP`)** — `Ethernet.maintain()` (odnawianie dzierżawy DHCP) +
+   *(opcja `EthModule`)* obsługa jednego klienta strony WWW (patrz §7) + *(opcja `OTRSP_TCP`)*
+   obsługa **trwałego** połączenia OTRSP-TCP (patrz §6 — inny model niż request/response WWW).
 4. **(opcja `serialECHO`)** — telemetria na serial.
 5. **Przycisk** — długie naciśnięcie przełącza `menu1state` (tryb edycji enkoderem).
 6. **LCD** — odświeżenie linii (`show()`) co 100 ms + kontrola napięcia co 3 s. Ostrzeżenia
@@ -116,7 +123,17 @@ nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
   Zgodnie ze specyfikacją [OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf) komendy kończy
   znak **CR (`\r`)** — `serialEvent()` terminuje na `\r` (LF ignorowany, na wypadek CRLF), z
   kontrolą granic `in_buf`. Odpowiedzi `?AUX1`/`?AUX2` zwracają samą wartość dziesiętną (bez
-  dopełnień) — zgodny round-trip `AUXn` → `?AUXn`.
+  dopełnień) — zgodny round-trip `AUXn` → `?AUXn`. Parser `OTRSP_parse(char *cmd, Print &out)`
+  przyjmuje bufor komendy i cel odpowiedzi (`Print&`) — używany identycznie z USB (`Serial`) i,
+  przy `OTRSP_TCP`, z surowego gniazda TCP (`EthernetClient`); zero duplikacji logiki komend.
+- **(opcja) OTRSP przez TCP (`OTRSP_TCP`, wymaga `OTRSP`):** dodatkowy `EthernetServer
+  otrspServer(OTRSP_TCP_PORT)` (domyślnie port 4534) w `loop()`. **Połączenie trwałe** — inaczej
+  niż serwer WWW (accept→jedna linia→odpowiedź→`stop()`), klient `otrspClient` jest trzymany
+  między iteracjami `loop()`, dopóki sam się nie rozłączy; komendy mogą przychodzić wieloma
+  porcjami w czasie. Własny bufor linii `otrsp_tcp_buf`/`otrsp_tcp_len`, niezależny od USB
+  (`in_buf`) — oba kanały działają **równolegle**, bez wzajemnego mieszania komend. Jeden aktywny
+  klient TCP na raz (nowe połączenie zastępuje bieżące przy odbiorze danych — rozróżniane po
+  numerze gniazda, `EthernetClient::operator==`). Wymaga `EthModule` **wyłączonego** — patrz §2/§9.
 
 ## 7. Serwer WWW (przy `EthModule`)
 
@@ -164,7 +181,7 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
   (enkoder 0..7) — pod `#ifdef`, w domyślnym buildzie nie istnieje i nie zajmuje flash. Sentinel
   przesunięty z 8 na 7 → **zlikwidowana martwa luka** po usuniętej 7. antenie (`antRAM` = `[8]`);
   domyślna nazwa stacji: `siteDefault` (`"SP9PDF"`). Radio Flex nie ma nazw (same ikony power).
-- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[9][ANT_MAXLEN+1]` oraz **nazwa stacji** w
+- Przy `WEB_ANT_NAMES`: nazwy anten 1–6 w RAM `antRAM[8][ANT_MAXLEN+1]` oraz **nazwa stacji** w
   `siteRAM[ANT_MAXLEN+1]`, ładowane w `setup()` przez `loadAntNames()` z fallbackiem na domyślne.
   Zapis `saveAntNames()` używa `EEPROM.update` (mniejsze zużycie komórek).
 - **Układ EEPROM (SQ9FK):** bajt `0` = magic `0xA5` (sekcja anten) + 6×`ANT_MAXLEN` (offset `1`);
@@ -176,8 +193,14 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build: **Flash 98,0 %** (30102 B) / **RAM 45,6 %** (934 B). Flash prawie pełny (~600 B).
-Build z wszystkim WŁ. (BCD+PTT+Ethernet) **już się nie mieści** (~102%) — te opcje bez `EthModule`.
+Domyślny build (strona WWW): **Flash 99,7 %** (30626 B) / **RAM 45,6 %** (934 B). Flash prawie
+pełny (~94 B). Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści**.
+
+**Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
+sam Ethernet+DHCP. Zmierzone (usunięcie ciała `if (client) {...}` strony WWW, zastąpione zaślepką
+accept+close): Ethernet+DHCP **bez** strony WWW = **72,5 %** (22270 B); + `OTRSP` po USB = **74,1 %**
+(22772 B); + `OTRSP_TCP` (USB+TCP równolegle) = **75,7 %** (23244 B) — **~7,5 KB zapasu**. To dlatego
+wariant `OTRSP`+`OTRSP_TCP` (bez strony WWW, patrz §2/§6) ma tyle miejsca mimo Ethernetu/DHCP.
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
@@ -189,23 +212,30 @@ Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - parsowanie żądań **bez `String`** (bufor `char`), walidacja zakresu (brak zapisu poza `port[]`);
 - czytanie tylko pierwszej linii żądania.
 
-BCD/PTT/OTRSP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
+BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 
 ## 10. Mapa `#ifdef` (gdzie szukać przy zmianach)
 
 | Funkcja | Miejsca w kodzie |
 |---------|------------------|
-| `EthModule` | globalne (mac/ip/server, `HTTP_HEAD*`, `POWER_SVG`, `BufP`), sekcja serwera w `loop()`, `setup()` |
+| `EthModule` \| `OTRSP_TCP` | mac/ip/gateway/subnet + DHCP+fallback w `setup()`, `Ethernet.maintain()` w `loop()` — **wspólne** dla obu |
+| `EthModule` | `server(80)`, `HTTP_HEAD*`, `POWER_SVG`, `BufP`, sekcja serwera WWW w `loop()` |
+| `OTRSP_TCP` | `otrspServer`/`otrspClient`/`otrsp_tcp_buf`/`otrsp_tcp_len`, sekcja „OTRSP TCP" w `loop()` |
 | `WEB_ANT_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
-| `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „8" w `show()`, cała funkcja `rx()` |
+| `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „7" w `show()`, cała funkcja `rx()` |
 | `PTT_BLOCKING` | warunki `if(port[i][2]==0)` w `loop()`, plakietka PTT w `show()` i WWW, odczyt PTT w `rx()` |
-| `OTRSP` | deklaracje bufora, wywołanie w `loop()`, `OTRSP_parse()`, `serialEvent()` |
+| `OTRSP` | deklaracja `in_buf`/`in_len`, wywołanie w `loop()` (USB), `OTRSP_parse(char*,Print&)`, `serialEvent()` |
 
 > Wykrywanie kolizji między TRX jest **osobne** od `PTT_BLOCKING` i działa zawsze.
 
 ## 11. Weryfikacja
 
 - Kompilacja: `pio run -e nanoatmega328` (0 ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki
-  `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` (razem z
-  Ethernetem **~102% — nie mieści się**; sprawdzaj te gałęzie bez `EthModule`).
-- Testy funkcjonalne (W5500, EEPROM, przełączanie) — na docelowej stacji (brak sprzętu w CI).
+  `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` — razem ze
+  stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
+- **Trzy warianty do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) domyślny (`EthModule`,
+  strona WWW); (2) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu); (3) `#define OTRSP`
+  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle). Kombinacja `EthModule` +
+  `OTRSP_TCP` **musi** dać `#error` w compile-time (celowe zabezpieczenie, nie regresja).
+- Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
+  stacji (brak sprzętu w CI).
