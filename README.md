@@ -55,12 +55,13 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   adres jest ignorowany, stara wartość zostaje). Zmiana wymaga restartu urządzenia.
 - **Sterowanie OTRSP** (SO2R, zgodne z [protokołem OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf))
   — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`/`?`, zgodne m.in. z N1MM+. Komendy
-  kończy CR (`\r`), zgodnie ze specyfikacją. **Opcjonalne** (`OTRSP`), domyślnie wyłączone —
-  wyklucza się rozmiarowo ze stroną WWW (`EthModule`).
-  Dodatkowa opcja **`OTRSP_TCP`** (wymaga `OTRSP`, wyklucza się z `EthModule`) udostępnia OTRSP
-  jednocześnie po USB **i** po surowym gnieździe TCP (`OTRSP_TCP_PORT`, domyślnie 4534) — bez
-  strony WWW, ale z Ethernetem/DHCP. Sam parser komend jest wspólny dla obu kanałów
-  (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii.
+  kończy CR (`\r`), zgodnie ze specyfikacją. **Opcjonalne** (`OTRSP`), domyślnie wyłączone.
+  Kanał USB (`OTRSP`) i surowe gniazdo TCP (`OTRSP_TCP`, domyślny port 4534) są **niezależne** —
+  można włączyć jeden, drugi, albo oba naraz; sam parser komend jest wspólny
+  (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii. Każdy z nich **osobno**
+  mieści się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~410 B, `OTRSP_TCP`
+  (gniazdo TCP) z zapasem **zaledwie 6 B** (patrz uwaga niżej). **Oba naraz** (`OTRSP`+`OTRSP_TCP`)
+  ze stroną WWW **nie mieszczą się** (brakuje ~116 B) — to jedyna blokowana kombinacja.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania — **nieblokujące**
@@ -88,7 +89,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
 | `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
 | `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | WYŁ.      | + surowy TCP dla OTRSP (wymaga `OTRSP`, wyklucza `EthModule`) |
+| `OTRSP_TCP`     | WYŁ.      | surowy TCP dla OTRSP — niezależne od `OTRSP`, wyklucza `EthModule` |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
 | `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW                        |
@@ -163,14 +164,26 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > Sama strona WWW (HTML/CSS/`BufP`) kosztuje dodatkowo ~8 KB — to ona, nie sam Ethernet, zajmuje
 > większość budżetu.
 >
-> Trzy warianty (wzajemnie wykluczające się — patrz `#error` w `src/main.ino`):
+> `OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) są **niezależne** — każdy może być włączony osobno,
+> i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
+> **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
 > - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define __USE_DHCP__`,
 >   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **97,0%** (29794 B), RAM **48,2%** (988 B)
-> - **OTRSP po USB**: `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
+> - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
+>   → Flash **98,7%** (30310 B), RAM **51,5%** (1054 B) — zapas ~410 B
+> - **Strona WWW + OTRSP po surowym TCP**: `#define EthModule`, `//#define OTRSP`,
+>   `#define OTRSP_TCP` → Flash **100,0%** (30714 B), RAM **52,4%** (1074 B) — zapas **zaledwie
+>   6 B**! Skrajnie ciasny wariant — każda przyszła zmiana w kodzie WWW/CSS może wymagać
+>   ponownego przycięcia, żeby dalej się mieścił. Traktuj jako "działa dziś", nie jako trwałą
+>   gwarancję.
+> - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash **37,9%** (11634 B), RAM **37,3%** (763 B)
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW, **z DHCP** — jest zapas):
 >   `//#define EthModule`, `#define OTRSP`, `#define OTRSP_TCP`, `#define __USE_DHCP__`
->   → Flash **82,6%** (25386 B), RAM **60,0%** (1228 B)
+>   → Flash **82,5%** (25330 B), RAM **60,0%** (1228 B)
+>
+> Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieści się**
+> (brakuje ~116 B) — to jedyna blokowana kombinacja, wymuszona `#error` w compile-time.
 
 ### Optymalizacje rozmiaru (zastosowane)
 

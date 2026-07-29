@@ -32,11 +32,27 @@ Wykrywanie kolizji między TRX działa zawsze.
   `BufP`/print-y) kosztuje dodatkowo ~8 KB — nie sam Ethernet. Zmierzone: Ethernet bez DHCP i bez
   strony WWW = ~72,5% (22270 B); + OTRSP (serial) = ~74,1%; + `OTRSP_TCP` z DHCP wł. = **82,8%**
   (ma zapas, DHCP tu można zostawić włączone).
-  **Trzy warianty** (`#error` wymusza wykluczenie): (1) `EthModule` — strona WWW (static IP);
-  (2) `OTRSP` — OTRSP tylko po USB, bez Ethernetu, ~38% flash; (3) `OTRSP`+`OTRSP_TCP` — OTRSP po
-  USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyślnie 4534) jednocześnie, bez strony WWW, **82,8%**
-  flash z DHCP włączonym. `OTRSP_parse(char*, Print&)` jest wspólny dla obu kanałów (Serial
-  i EthernetClient dziedziczą po `Print`) — nie duplikuj logiki komend przy zmianach.
+  **`OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) sa NIEZALEZNE** — kazdy moze byc wlaczony osobno
+  albo razem (wspolny `OTRSP_parse(char*, Print&)` kompiluje sie przy `#if defined(OTRSP) ||
+  defined(OTRSP_TCP)`; `serialEvent()`/`in_buf` zostaja pod samym `OTRSP`, bo sa specyficzne dla
+  USB). Serial i EthernetClient dziedzicza po `Print` — nie duplikuj logiki komend przy zmianach.
+  **Piec wariantow** (`#error` wymusza wykluczenie tylko WSZYSTKICH TRZECH naraz): (1) `EthModule`
+  — strona WWW (static IP), 97,0%; (2) `EthModule`+`OTRSP` — strona WWW + OTRSP po USB, **98,7%**
+  (zapas ~410 B); (3) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **100,0% — zapas
+  ZALEDWIE 6 B** (skrajnie ciasne; przy jakiejkolwiek zmianie w kodzie WWW/CSS/OTRSP_TCP buduj
+  TEN wariant jako pierwszy, bo najlatwiej go zepsuc); (4) `OTRSP` — OTRSP tylko po USB, bez
+  Ethernetu, ~38% flash; (5) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
+  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **82,5%** flash z DHCP
+  wlaczonym. **`EthModule`+`OTRSP`+`OTRSP_TCP` (wszystkie trzy naraz) NIE miesci sie** (brakuje
+  ~116 B) — to jedyna blokowana kombinacja. Uwaga: `DNSClient::getHostByName`/wirtualna metoda
+  `connect(hostname)` w `EthernetClient` (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje
+  cala tabele wirtualna) to koszt JUZ OBECNY w domyslnym buildzie WWW (97,0%) — nie jest to
+  specyficzne dla `OTRSP_TCP`, wiec nie tlumaczyl niedoboru bajtow przy tym wariancie (bledny
+  trop z wczesniejszej analizy). Rzeczywisty powod niedoboru: kod `OTRSP_TCP` (parser+bufor+
+  petla) wazy ~968 B, a domyslny build ma tylko ~926 B zapasu — brakujace 42 B odzyskano
+  poprawka logiki reconnect w bloku "OTRSP TCP" (`.stop()` na starym polaczeniu przy zastapieniu
+  nowym klientem zamiast `otrspClient = EthernetClient()`, patrz `loop()`), przy okazji
+  poprawiajac tez poprawnosc (gniazdo W5500 jest teraz zawsze jawnie zamykane).
 - **Konfiguracja sieciowa edytowalna przez WWW** (`netCfg[4]` = wskaźniki na `ip/gateway/subnet/
   myDns`, `loadNetConfig()`/`saveNetConfig()`, `parseIPField()` używa `IPAddress::fromString` —
   **nie pisz własnego parsera dotted-decimal**, biblioteka go ma). IP nie są już „na sztywno" —
@@ -118,8 +134,9 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
   `docs/CONNECTIONS.md`). Rejestry GPIOA=0x12, GPIOB=0x13.
 - **Kluczowe funkcje**: `tx()` (one-hot na przekaźniki), `show()` (rysowanie linii LCD),
   `encI()`/`enc2()` (enkoder na przerwaniu). Opcjonalnie: `rx()` (BCD+PTT, tylko `BCD_INPUT`),
-  `OTRSP_parse(char *cmd, Print &out)` (SO2R, tylko `OTRSP`) — wywoływany z dwóch niezależnych
-  miejsc: `loop()` dla USB (`OTRSP_parse(in_buf, Serial)`, bufor/terminator w `serialEvent()`)
+  `OTRSP_parse(char *cmd, Print &out)` (SO2R, przy `OTRSP` LUB `OTRSP_TCP`) — wywoływany z dwóch
+  niezależnych miejsc: `loop()` dla USB (`OTRSP_parse(in_buf, Serial)`, bufor/terminator w
+  `serialEvent()`, oba tylko przy `OTRSP`)
   i — przy `OTRSP_TCP` — z bloku „OTRSP TCP" w `loop()` (`OTRSP_parse(otrsp_tcp_buf, otrspClient)`,
   własny bufor `otrsp_tcp_buf`/`otrsp_tcp_len`). Połączenie TCP jest **trwałe** (klient trzymany
   w `otrspClient` między iteracjami `loop()`), inaczej niż serwer WWW (request/response,
@@ -158,8 +175,9 @@ wszystkimi miejscami dotyczącymi danej zmiany:
 
 - Kompilacja: `pio run` (bez ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki `Ethernet`
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
-  `#ifdef` nie uległy rozjechaniu. **Trzy warianty do zbudowania** przy zmianach w Ethernet/OTRSP
-  — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11.
+  `#ifdef` nie uległy rozjechaniu. **Pięć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
+  — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` ma
+  zapas zaledwie ~6 B — buduj go w pierwszej kolejności, najłatwiej go zepsuć.
 - **Wygląd interfejsu WWW** można podejrzeć bez sprzętu: `tools/websim.html` (symulator
   odtwarzający HTML/CSS firmware) lub `python tools/serve.py`. Przy zmianie HTML strony
   zaktualizuj też symulator.

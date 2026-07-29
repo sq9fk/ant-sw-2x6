@@ -178,9 +178,9 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 #define inputHigh          // enable input High level (default)
 //#define serialECHO       // enable TX echo on serial port
 //#define OTRSP            // enable serial OTSRP on serial port (disabled to free flash for EthModule)
-// SQ9FK: OTRSP_TCP dodaje surowe gniazdo TCP dla OTRSP obok USB (wymaga OTRSP; wyklucza sie ze
-// strona WWW - EthModule - patrz #error nizej i docs/DESIGN.md). Port dowolny, nie narzucony
-// przez protokol OTRSP.
+// SQ9FK: OTRSP_TCP dodaje surowe gniazdo TCP dla OTRSP - niezalezne od OTRSP (USB), moga byc
+// wlaczone osobno albo razem; wyklucza sie ze strona WWW (EthModule) - patrz #error nizej
+// i docs/DESIGN.md. Port dowolny, nie narzucony przez protokol OTRSP.
 //#define OTRSP_TCP
 #define OTRSP_TCP_PORT 4534
 //#define OTRSP_DEBUG
@@ -193,11 +193,14 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 // tam DHCP sie miesci (patrz docs/DESIGN.md).
 //#define __USE_DHCP__       // Uncomment to Enable DHCP
 //====================================================================
-#if defined(OTRSP_TCP) && !defined(OTRSP)
-  #error "OTRSP_TCP wymaga zdefiniowania OTRSP (surowy TCP to dodatkowy kanal do tego samego parsera)"
-#endif
-#if defined(OTRSP_TCP) && defined(EthModule)
-  #error "OTRSP_TCP wyklucza sie z EthModule (strona WWW) - razem nie miesca sie w flash ATmega328"
+// SQ9FK: OTRSP (USB) i OTRSP_TCP sa NIEZALEZNE - kazdy moze byc wlaczony osobno (wspolny parser
+// OTRSP_parse() kompiluje sie, gdy zdefiniowany jest ktorykolwiek z nich). Oba (osobno) MIESZCZA
+// sie razem z EthModule/strona WWW: samo OTRSP (USB) - 98,7% (zapas ~410 B), samo OTRSP_TCP -
+// 100,0% (zapas ZALEDWIE 6 B, patrz docs/DESIGN.md - kazda przyszla zmiana w kodzie WWW/CSS moze
+// wymagac ponownego przyciecia tego wariantu). WSZYSTKIE TRZY naraz (EthModule+OTRSP+OTRSP_TCP)
+// NIE miesza sie (brakuje ~116 B) - to jedyna blokowana kombinacja.
+#if defined(OTRSP_TCP) && defined(EthModule) && defined(OTRSP)
+  #error "EthModule + OTRSP + OTRSP_TCP naraz nie miesci sie w flash ATmega328 (brakuje ~116 B). Wybierz WWW+OTRSP (USB) albo WWW+OTRSP_TCP - nie oba kanaly naraz z WWW."
 #endif
 // SQ9FK: sprzet sieciowy (W5500/DHCP) potrzebny zarowno dla strony WWW (EthModule) jak i dla
 // surowego TCP OTRSP (OTRSP_TCP) - bring-up jest wspolny, tylko serwer/tresc na porcie sa inne.
@@ -429,7 +432,7 @@ static byte in_len;      // Number of chars in buffer
 boolean stringComplete = false;  // whether the string is complete
 #endif
 
-#if defined(OTRSP)
+#if defined(OTRSP) || defined(OTRSP_TCP)
 static void OTRSP_parse(char *cmd, Print &out);
 #endif
 
@@ -837,15 +840,15 @@ void loop() {
   // bez wzajemnego mieszania komend. Jeden aktywny klient TCP na raz (device dla jednego
   // operatora/loggera; kolejne przychodzace polaczenie zastapi biezace przy odbiorze danych).
   if (otrspClient && !otrspClient.connected()) {
-    otrspClient.stop();
-    otrspClient = EthernetClient();     // zerwane polaczenie -> wyczysc powiazany stan
+    otrspClient.stop();                 // zerwane polaczenie -> zwolnij gniazdo W5500
     otrsp_tcp_len = 0;
   }
   {
     EthernetClient newC = otrspServer.available();   // ma dane do odczytania TERAZ
     if (newC) {
       if (!(newC == otrspClient)) {
-        otrspClient = newC;             // inny socket = nowe polaczenie -> czysty bufor
+        if (otrspClient) otrspClient.stop();   // inny socket = poprzedni jeszcze otwarty -> zamknij
+        otrspClient = newC;
         otrsp_tcp_len = 0;
       }
       int avail = otrspClient.available();
@@ -1180,10 +1183,11 @@ void rx(byte addr, int portNR, int PTTonly, int Bank) {
 }
 #endif   // BCD_INPUT
 
-#if defined(OTRSP)
+#if defined(OTRSP) || defined(OTRSP_TCP)
 // SQ9FK: parser przyjmuje bufor komendy i cel odpowiedzi (Print&) zamiast na sztywno globalnego
-// in_buf/Serial - dzieki temu ten sam kod obsluguje zarowno USB (Serial) jak i (opcja OTRSP_TCP)
-// surowy klient TCP (EthernetClient), bo oba dziedzicza po Print. Zero duplikacji logiki komend.
+// in_buf/Serial - dzieki temu ten sam kod obsluguje zarowno USB (Serial, OTRSP) jak i surowy
+// klient TCP (EthernetClient, OTRSP_TCP), bo oba dziedzicza po Print. Zero duplikacji logiki
+// komend - kazdy z dwoch kanalow jest teraz niezalezny (moga byc wlaczone osobno lub razem).
 static void OTRSP_parse(char *cmd, Print &out) {
 //----------------------------------------------------------------------
 // Parse and handle a command from the computer
@@ -1257,7 +1261,11 @@ static void OTRSP_parse(char *cmd, Print &out) {
     // set something which is read-only such as NAME or CR0.
     return;
 }
+#endif   // OTRSP || OTRSP_TCP
 
+#if defined(OTRSP)
+// SQ9FK: serialEvent/in_buf sa specyficzne dla kanalu USB - nie kompiluja sie, gdy wlaczony
+// jest tylko OTRSP_TCP (surowy TCP ma wlasny bufor otrsp_tcp_buf, patrz blok "OTRSP TCP" w loop()).
 void serialEvent() {
   while (Serial.available()) {
     char inChar = (char)Serial.read();
