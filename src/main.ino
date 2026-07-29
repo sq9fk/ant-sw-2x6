@@ -1,4 +1,5 @@
 #include <Arduino.h>   // jawne dla IntelliSense (build .ino i tak go docieka; naprawia falszywy blad PROGMEM w VS Code)
+#include <avr/wdt.h>   // SQ9FK: watchdog - reset przy zawieszeniu (patrz setup()/loop()) + restart z WWW
 
 /*
 
@@ -176,11 +177,11 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 #define LCDculumn  16      //
 #define inputHigh          // enable input High level (default)
 //#define serialECHO       // enable TX echo on serial port
-//#define OTRSP            // enable serial OTSRP on serial port (disabled to free flash for EthModule)
-// SQ9FK: OTRSP_TCP dodaje surowe gniazdo TCP dla OTRSP - niezalezne od OTRSP (USB), moga byc
-// wlaczone osobno albo razem; wyklucza sie ze strona WWW (EthModule) - patrz #error nizej
-// i docs/DESIGN.md. Port dowolny, nie narzucony przez protokol OTRSP.
-//#define OTRSP_TCP
+//#define OTRSP            // enable serial OTSRP on serial port
+// SQ9FK: OTRSP_TCP - surowe gniazdo TCP dla OTRSP, niezalezne od OTRSP (USB), moga byc wlaczone
+// osobno albo razem. DOMYSLNIE WLACZONE razem z EthModule (WWW+OTRSP_TCP - np. do N1MM+ przez
+// TCP) - zapas ZALEDWIE ~4 B, patrz docs/DESIGN.md. Port dowolny, nie narzucony przez protokol.
+#define OTRSP_TCP
 #define OTRSP_TCP_PORT 4534
 //#define OTRSP_DEBUG
 #define SERBAUD    9600    // [baud] Serial port baudrate
@@ -191,11 +192,12 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 // tylko w wariantach bez strony WWW - nie warto trzymac calej sciezki kodu dla tego przypadku.
 //====================================================================
 // SQ9FK: OTRSP (USB) i OTRSP_TCP sa NIEZALEZNE - kazdy moze byc wlaczony osobno (wspolny parser
-// OTRSP_parse() kompiluje sie, gdy zdefiniowany jest ktorykolwiek z nich). Oba (osobno) MIESZCZA
-// sie razem z EthModule/strona WWW: samo OTRSP (USB) - 98,7% (zapas ~410 B), samo OTRSP_TCP -
-// 100,0% (zapas ZALEDWIE 6 B, patrz docs/DESIGN.md - kazda przyszla zmiana w kodzie WWW/CSS moze
-// wymagac ponownego przyciecia tego wariantu). WSZYSTKIE TRZY naraz (EthModule+OTRSP+OTRSP_TCP)
-// NIE miesza sie (brakuje ~116 B) - to jedyna blokowana kombinacja.
+// OTRSP_parse() kompiluje sie, gdy zdefiniowany jest ktorykolwiek z nich). DOMYSLNY BUILD to
+// EthModule+OTRSP_TCP (strona WWW + OTRSP po TCP, np. dla N1MM+) - 100,0% flash, zapas ZALEDWIE
+// ~4 B (patrz docs/DESIGN.md) - kazda zmiana w kodzie WWW/CSS/OTRSP_TCP MUSI byc zbudowana
+// NAJPIERW na tym wariancie, bo najlatwiej go zepsuc. Samo OTRSP (USB) z EthModule tez sie
+// miesci (98,7%, zapas ~410 B). WSZYSTKIE TRZY naraz (EthModule+OTRSP+OTRSP_TCP) NIE miesza sie
+// (brakuje ~116 B) - to jedyna blokowana kombinacja.
 #if defined(OTRSP_TCP) && defined(EthModule) && defined(OTRSP)
   #error "EthModule + OTRSP + OTRSP_TCP naraz nie miesci sie w flash ATmega328 (brakuje ~116 B). Wybierz WWW+OTRSP (USB) albo WWW+OTRSP_TCP - nie oba kanaly naraz z WWW."
 #endif
@@ -331,9 +333,7 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "details.card summary h2{margin:0}\r\n"
     ".chev{color:#a7b9be}\r\n"
     ".nm{display:flex;align-items:center;gap:.5rem;margin:.4rem 0}\r\n"
-    ".nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\r\n"
-    ".rows .row{display:flex;justify-content:space-between;padding:.5rem 0 0}\r\n"
-    ".rows span{color:#a7b9be}\r\n"
+    ".nm b{flex:0 0 4.3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\r\n"
     "@media(max-width:520px){.tb{font-size:.95rem;padding:.7rem max(.85rem,env(safe-area-inset-right)) "
       ".7rem max(.85rem,env(safe-area-inset-left))}.astat{min-width:0;flex:1 1 100%}.bcd,.bcdr{min-width:0;"
       "flex-basis:100%;margin-right:.2rem;font-size:.82rem;padding:.35rem .55rem}input[type=submit],.flx{"
@@ -346,6 +346,16 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.5\" "
     "stroke-linecap=\"round\"><line x1=\"12\" y1=\"3\" x2=\"12\" y2=\"12\"/>"
     "<path d=\"M6.4 7.3a8 8 0 1 0 11.2 0\"/></svg>";
+
+  // SQ9FK: fragmenty wspolne dla pol edycji w Settings (nazwa stacji, nazwy anten 1-6, siec,
+  // przycisk Restart) - byly zdublowane jako osobne literaly F() w kazdym bloku; wspolny PROGMEM
+  // oszczedza flash (kazdy z tych blokow byl budowany osobno, mimo identycznej struktury).
+  const char nmOpen[] PROGMEM = "<div class=\"nm\"><b>";
+#if defined(WWW_EEPROM_NAMES)
+  const char nmMid[] PROGMEM = "</b><form method=\"get\" style=\"display:inline\"><input name=\"N";
+  const char nmLen11[] PROGMEM = "\" maxlength=\"11\" size=\"12\" value=\"";
+  const char nmClose[] PROGMEM = "\"><input type=\"submit\" value=\"OK\"></form></div>";
+#endif
 
   // SQ9FK: bufor wyjscia strony. W Ethernet2 kazde send() to osobny segment TCP + busy-wait na
   // SEND_OK, a out.print(F("...")) wysyla ZNAK PO ZNAKU -> setki drobnych pakietow = wolno.
@@ -423,6 +433,12 @@ byte port[8][6] = {
 // SQ9FK: stan dwoch niezaleznych wyjsc Radio Flex: [0]=GPA7 (K1/J7), [1]=GPB7 (K2/J6). 0=off 1=on
 byte flexState[2] = { 0, 0 };
 
+#if defined(EthModule)
+// SQ9FK: przycisk "Restart" w WWW Settings (/?R1) - patrz koniec loop(). Restart odpalany
+// dopiero PO wyslaniu odpowiedzi (nastepna iteracja loop()), zeby klient dostal pelna strone.
+boolean pendingRestart = false;
+#endif
+
 #if defined(OTRSP)
 char        in_buf[64];  // UART input buffer
 static byte in_len;      // Number of chars in buffer
@@ -436,6 +452,11 @@ static void OTRSP_parse(char *cmd, Print &out);
 //=================================================================
 void setup()
 {
+  // SQ9FK: niektore bootloadery nie czyszcza wlaczonego WDT przed skokiem do aplikacji - bez
+  // tego, jesli poprzedni reset byl wywolany przez WDT z krotkim timeoutem, urzadzenie wpadaloby
+  // w petle resetow zanim dojdzie do wlasciwego wdt_enable() na koncu setup().
+  MCUSR = 0;
+  wdt_disable();
 #if defined(WWW_EEPROM_NAMES)
   loadAntNames();          // SQ9FK: wczytaj nazwy anten z EEPROM (lub domyslne)
 #endif
@@ -503,9 +524,22 @@ void setup()
   lcd.print(Ethernet.localIP());
   delay(5000);       // pokaz IP na LCD (5 s)
 #endif
+  // SQ9FK: watchdog WLACZANY DOPIERO TU - musi byc po wszystkich delay() w setup() (splash+napiecie
+  // +IP, lacznie do ~10 s), inaczej WDTO_8S (najdluzszy pojedynczy timeout AVR) zresetowalby
+  // urzadzenie w trakcie startu, zanim dojdzie do loop() (petla resetow).
+  wdt_enable(WDTO_8S);
 }
 
 void loop() {
+  wdt_reset();      // SQ9FK: watchdog - jesli petla sie zawiesi (WWW/TCP/USB/cokolwiek), reset po ~8 s
+#if defined(EthModule)
+  // SQ9FK: przycisk Restart w Settings - flaga ustawiona POPRZEDNIA iteracja (po wyslaniu
+  // pelnej odpowiedzi klientowi), wiec restartujemy dopiero teraz. Skrocony timeout WDT zamiast
+  // np. skoku na adres 0 - to jedyny NIEZAWODNY sposob softwarowego resetu na AVR (czysci tez
+  // peryferia, nie tylko licznik rozkazow).
+  if (pendingRestart) { wdt_enable(WDTO_15MS); while (1) {} }
+#endif
+
 
     //=====[ OTRSP ]=================
 #if defined(OTRSP)
@@ -632,6 +666,8 @@ void loop() {
           if (reqBuf[6] == 'F' && (reqBuf[7] == '1' || reqBuf[7] == '2') &&
                                   (reqBuf[8] == '0' || reqBuf[8] == '1')) {
             flexState[reqBuf[7] - '1'] = (reqBuf[8] == '1'); // SQ9FK: przelaczenie Radio Flex
+          } else if (reqBuf[6] == 'R' && reqBuf[7] == '1') {
+            pendingRestart = true;   // SQ9FK: przycisk Restart w Settings - patrz koniec loop()
           } else {
             int bankIdx = -1, getVal = 0;
             if (reqLen >= 10 &&
@@ -752,48 +788,55 @@ void loop() {
           // SQ9FK: Settings (zwijane <details>) - nazwa stacji + nazwy anten + ukryte napiecie
           out.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
 #if defined(WWW_EEPROM_NAMES)
-          // SQ9FK: nazwa stacji -> /?NS={nazwa}
-          out.print(F("<div class=\"nm\"><b>Nazwa</b><form method=\"get\" style=\"display:inline\">"
-                         "<input name=\"NS\" maxlength=\"11\" size=\"12\" value=\""));
+          // SQ9FK: nazwa stacji -> /?NS={nazwa}; wspolne fragmenty (nmOpen/nmMid/nmLen11/nmClose)
+          // patrz deklaracja przy POWER_SVG - ten sam uklad co petla anten i petla sieci nizej.
+          out.print((const __FlashStringHelper*)nmOpen);
+          out.print(F("Nazwa"));
+          out.print((const __FlashStringHelper*)nmMid);
+          out.print('S');
+          out.print((const __FlashStringHelper*)nmLen11);
           out.print(siteName());
-          out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+          out.println((const __FlashStringHelper*)nmClose);
           // SQ9FK: edycja nazw anten (1..6) -> /?N{k}={nazwa}
           for (byte k = 1; k <= 6; k++) {
-            out.print(F("<div class=\"nm\"><b>"));
+            out.print((const __FlashStringHelper*)nmOpen);
             out.print(k);
-            out.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
+            out.print((const __FlashStringHelper*)nmMid);
             out.print(k);
-            out.print(F("\" maxlength=\"11\" size=\"12\" value=\""));
+            out.print((const __FlashStringHelper*)nmLen11);
             out.print(antName(k));
-            out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+            out.println((const __FlashStringHelper*)nmClose);
           }
           // SQ9FK: edycja IP/gateway/maski/DNS -> /?N{I|G|M|D}={a.b.c.d} (petla - oszczednosc flash)
           for (byte f = 0; f < 4; f++) {
-            out.print(F("<div class=\"nm\"><b>"));
+            out.print((const __FlashStringHelper*)nmOpen);
             out.print((const __FlashStringHelper*)pgm_read_word(&netLbl[f]));
-            out.print(F("</b><form method=\"get\" style=\"display:inline\"><input name=\"N"));
+            out.print((const __FlashStringHelper*)nmMid);
             out.print((char)pgm_read_byte(&netCode[f]));
             out.print(F("\" maxlength=\"15\" size=\"15\" value=\""));
             out.print(*netCfg[f]);
-            out.println(F("\"><input type=\"submit\" value=\"OK\"></form></div>"));
+            out.println((const __FlashStringHelper*)nmClose);
           }
           out.println(F("<small>Zmiana sieci wymaga restartu urzadzenia.</small>"));
 #else
-          out.print(F("<div class=\"nm\"><b>Nazwa</b>"));
+          out.print((const __FlashStringHelper*)nmOpen);
+          out.print(F("Nazwa</b>"));
           out.println(siteName());
           out.println(F("</div>"));
           for (byte k = 1; k <= 6; k++) {
-            out.print(F("<div class=\"nm\"><b>"));
+            out.print((const __FlashStringHelper*)nmOpen);
             out.print(k);
             out.print(F("</b>"));
             out.println(antName(k));
             out.println(F("</div>"));
           }
 #endif
-          // SQ9FK: ukryty (w zwinietym Settings) odczyt napiecia zasilania (ostrzezenie = czerwona kropka w topbarze)
-          out.print(F("<div class=\"rows\"><div class=\"row\"><span>Napi&#281;cie zasilania</span><strong>"));
-          out.print(vv);
-          out.println(F("V</strong></div></div>"));
+          // SQ9FK: przycisk Restart (/?R1) - watchdog z krotkim timeoutem, patrz koniec loop().
+          // Napiecie usuniete z Settings (bylo tylko do wgladu, ostrzezenie zostaje - czerwona
+          // kropka w topbarze, patrz "vv" wyzej) - nieuzywane dalej pole, oszczednosc flash/CSS.
+          out.print((const __FlashStringHelper*)nmOpen);
+          out.println(F("Restart</b><form method=\"get\" style=\"display:inline\">"
+                         "<input type=\"submit\" name=\"R1\" value=\"Restart\" class=\"gr\"></form></div>"));
           out.println(F("</details></div></body></html>"));
           out.done();   // SQ9FK: wyslij reszte bufora
 

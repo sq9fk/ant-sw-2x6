@@ -55,17 +55,27 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   adres jest ignorowany, stara wartość zostaje). Zmiana wymaga restartu urządzenia.
 - **Sterowanie OTRSP** (SO2R, zgodne z [protokołem OTRSP](https://www.k1xm.org/OTRSP/OTRSP_Protocol.pdf))
   — komendy `AUX1`/`AUX2`, zapytania `?AUX1`/`?AUX2`/`?NAME`/`?`, zgodne m.in. z N1MM+. Komendy
-  kończy CR (`\r`), zgodnie ze specyfikacją. **Opcjonalne** (`OTRSP`), domyślnie wyłączone.
-  Kanał USB (`OTRSP`) i surowe gniazdo TCP (`OTRSP_TCP`, domyślny port 4534) są **niezależne** —
-  można włączyć jeden, drugi, albo oba naraz; sam parser komend jest wspólny
+  kończy CR (`\r`), zgodnie ze specyfikacją. Kanał USB (`OTRSP`, domyślnie **wyłączony**) i surowe
+  gniazdo TCP (`OTRSP_TCP`, domyślny port 4534, domyślnie **włączone**) są **niezależne** — można
+  włączyć jeden, drugi, albo oba naraz; sam parser komend jest wspólny
   (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii. Każdy z nich **osobno**
-  mieści się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~410 B, `OTRSP_TCP`
-  (gniazdo TCP) z zapasem **zaledwie 6 B** (patrz uwaga niżej). **Oba naraz** (`OTRSP`+`OTRSP_TCP`)
-  ze stroną WWW **nie mieszczą się** (brakuje ~116 B) — to jedyna blokowana kombinacja.
+  mieści się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~650 B, `OTRSP_TCP`
+  (gniazdo TCP, **domyślny build**) z zapasem ~246 B (patrz uwaga niżej). **Oba naraz**
+  (`OTRSP`+`OTRSP_TCP`) ze stroną WWW **nie mieszczą się** (brakuje ~116 B) — to jedyna blokowana
+  kombinacja.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
-- **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania — **nieblokujące**
-  (nie zamrażają WWW/przełączania podczas awarii).
+- **Watchdog** (`<avr/wdt.h>`, zawsze włączony) — jeśli `loop()` się zawiesi (na WWW, TCP OTRSP,
+  USB OTRSP albo czymkolwiek innym) i nie wróci w ciągu ~8 s, urządzenie samo się resetuje.
+  Włączany dopiero na końcu `setup()` (po wszystkich `delay()` przy starcie — LCD/IP splash), żeby
+  nie zresetować urządzenia w trakcie rozruchu.
+- **Przycisk „Restart" w Settings** — realny, programowy restart urządzenia z poziomu WWW (nie
+  tylko informacja, że trzeba go ręcznie zrestartować). Wykorzystuje watchdog ze skróconym
+  timeoutem (15 ms) — jedyny niezawodny sposób softwarowego resetu na AVR (czyści też peryferia,
+  nie tylko licznik rozkazów, w przeciwieństwie do skoku na adres 0).
+- **Ostrzeżenia napięciowe** — czerwona kropka statusu w topbarze przy napięciu poza 10–15 V oraz
+  ostrzeżenie na LCD — **nieblokujące** (nie zamrażają WWW/przełączania podczas awarii). Samo
+  napięcie nie jest już pokazywane liczbowo w Settings (usunięte dla oszczędności flash).
 - **Zawsze static IP** — bez DHCP (usunięte z projektu, patrz niżej) — urządzenie startuje pod
   stałym adresem, ustawionym w `src/main.ino` lub edytowalnym po flashowaniu przez WWW+EEPROM
   (patrz „Konfiguracja sieciowa" wyżej), IP na LCD widoczne od razu przy starcie.
@@ -89,7 +99,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
 | `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
 | `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | WYŁ.      | surowy TCP dla OTRSP — niezależne od `OTRSP`; z `EthModule` mieści się, ale zapas to zaledwie ~6 B |
+| `OTRSP_TCP`     | **WŁ.**   | surowy TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~4 B) |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
 | `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW (zawsze static IP, bez DHCP) |
@@ -149,10 +159,10 @@ z `lib_deps` w [`platformio.ini`](platformio.ini). Ethernet (`#define EthModule`
 w `src/main.ino`) to oficjalna biblioteka Arduino `arduino-libraries/Ethernet` (2026-07-29:
 zastąpiła przestarzałą `adafruit/Ethernet2`).
 
-> **Domyślna konfiguracja: Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ.** Build zweryfikowany:
-> `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **97,0%** / 29794 B, RAM **48,2%** / 988 B — domyślne flagi: BCD/PTT wył.,
-> nazwy WWW wł., konfiguracja sieciowa edytowalna wł.). Flash **prawie pełny** (~926 B wolne).
+> **Domyślna konfiguracja: Ethernet WŁ. + OTRSP po TCP WŁ.** (strona WWW + gniazdo TCP dla
+> OTRSP, np. dla N1MM+, port 4534 — static IP). Build zweryfikowany: `pio run -e nanoatmega328`
+> → **SUCCESS**, bez ostrzeżeń (Flash **99,2%** / 30474 B, RAM **52,5%** / 1075 B — domyślne
+> flagi: BCD/PTT wył., nazwy WWW wł., konfiguracja sieciowa edytowalna wł., watchdog wł.).
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
@@ -166,19 +176,19 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > `OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) są **niezależne** — każdy może być włączony osobno,
 > i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
 > **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
-> - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define OTRSP`,
->   `//#define OTRSP_TCP` → Flash **97,0%** (29794 B), RAM **48,2%** (988 B)
+> - **Strona WWW + OTRSP po surowym TCP** (**obecnie, domyślne**): `#define EthModule`,
+>   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **99,2%** (30474 B), RAM **52,5%** (1075 B)
+>   — zapas ~246 B. Nadal najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
+>   zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
+> - **Strona WWW, static IP, bez OTRSP**: `#define EthModule`, `//#define OTRSP`,
+>   `//#define OTRSP_TCP` → Flash **96,2%** (29552 B), RAM **48,3%** (989 B) — zapas ~1,1 KB,
+>   bezpieczniejszy wybór jeśli OTRSP-TCP nie jest potrzebne.
 > - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **98,7%** (30310 B), RAM **51,5%** (1054 B) — zapas ~410 B
-> - **Strona WWW + OTRSP po surowym TCP**: `#define EthModule`, `//#define OTRSP`,
->   `#define OTRSP_TCP` → Flash **100,0%** (30714 B), RAM **52,4%** (1074 B) — zapas **zaledwie
->   6 B**! Skrajnie ciasny wariant — każda przyszła zmiana w kodzie WWW/CSS może wymagać
->   ponownego przycięcia, żeby dalej się mieścił. Traktuj jako "działa dziś", nie jako trwałą
->   gwarancję.
+>   → Flash **97,9%** (30070 B), RAM **51,5%** (1055 B) — zapas ~650 B
 > - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **37,9%** (11634 B), RAM **37,3%** (763 B)
+>   → Flash **38,0%** (11680 B), RAM **37,3%** (763 B)
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
->   `#define OTRSP`, `#define OTRSP_TCP` → Flash **70,3%** (21606 B), RAM **54,3%** (1112 B)
+>   `#define OTRSP`, `#define OTRSP_TCP` → Flash **70,5%** (21652 B), RAM **54,3%** (1112 B)
 >
 > Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieści się**
 > (brakuje ~116 B) — to jedyna blokowana kombinacja, wymuszona `#error` w compile-time.

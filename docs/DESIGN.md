@@ -10,7 +10,8 @@ Sterownik pozwala **2 transceiverom** dzielić **6 anten** bezkolizyjnie. Anten�
 TRX wybiera się:
 - **ręcznie** — interfejs WWW (Ethernet) lub enkoder + LCD (zawsze dostępne);
 - **automatycznie** — z danych pasma BCD radia (opcja `BCD_INPUT`, domyślnie wył.);
-- **z komputera** — OTRSP/SO2R (opcja `OTRSP`, domyślnie wył.).
+- **z komputera** — OTRSP/SO2R, po USB (opcja `OTRSP`, domyślnie wył.) lub po TCP (opcja
+  `OTRSP_TCP`, **domyślnie wł.** razem ze stroną WWW, np. do N1MM+).
 
 Rdzeń logiki (wybór anteny → wyjścia przekaźników, wykrywanie kolizji, LCD) działa niezależnie
 od opcji. Pętla `loop()` jest jednowątkowa i nieblokująca poza obsługą pojedynczego żądania WWW.
@@ -29,17 +30,19 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
 | `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
-| `OTRSP_TCP` | wył. | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; z `EthModule` mieści się, ale zapas to zaledwie ~6 B |
+| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~4 B) |
 | `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 
 **Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `OTRSP` i `OTRSP_TCP` są
 **niezależne od siebie** — wspólny `OTRSP_parse()` kompiluje się, gdy zdefiniowany jest
 którykolwiek z nich (patrz §8). `EthModule` (strona WWW) **mieści się z każdym z nich osobno**:
-samo `OTRSP` (USB) — zmierzone **98,7%**, zapas ~410 B; samo `OTRSP_TCP` (gniazdo TCP) —
-zmierzone **100,0%**, zapas **zaledwie 6 B** (skrajnie ciasne, patrz §9). **Oba naraz**
+samo `OTRSP` (USB) — zmierzone **97,9%**, zapas ~650 B; samo `OTRSP_TCP` (gniazdo TCP) —
+zmierzone **99,2%**, zapas **~246 B** (najciaśniejszy wariant, patrz §9). **Oba naraz**
 (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieszczą się** (brakuje ~116 B) — `#error` w kodzie
-wymusza to w compile-time. Domyślnie: Ethernet wł. (strona WWW), OTRSP/OTRSP_TCP wył.
+wymusza to w compile-time. **Domyślnie: Ethernet wł. + `OTRSP_TCP` wł.** (strona WWW + OTRSP
+po TCP), `OTRSP` (USB) wył. — to najciaśniejszy z pięciu wariantów i jest teraz domyślny,
+patrz §9/§11.
 **Pięć wariantów** — patrz §9, §11.
 
 ## 3. Model stanu — `port[8][6]`
@@ -69,6 +72,11 @@ używane są `0x20`/`0x21`.
 
 Kolejność w każdej iteracji:
 
+0. **Watchdog + restart** — `wdt_reset()` na samym początku (jeśli `loop()` się zawiesi i nie
+   wróci tu w ciągu ~8 s, AVR resetuje się sam — patrz §9 „Watchdog"). *(opcja `EthModule`)*
+   jeśli `pendingRestart` (ustawione przez `/?R1` w poprzedniej iteracji, patrz §7) —
+   `wdt_enable(WDTO_15MS); while(1){}` — restart urządzenia, **przed** czymkolwiek innym w tej
+   iteracji (klient WWW już dostał pełną odpowiedź w poprzedniej iteracji).
 1. **(opcja) OTRSP przez USB** — jeśli przyszła kompletna komenda serial (`serialEvent()`,
    terminator CR), `OTRSP_parse(in_buf, Serial)`.
 2. **GPIO / logika przełączania** — dla każdego TRX `i`:
@@ -86,13 +94,18 @@ Kolejność w każdej iteracji:
    LOW/HIGH są **nieblokujące** (znacznik `voltWarn`, ~2 s bez `delay()`) — awaria napięcia nie
    zamraża WWW/przełączania/enkodera.
 
-**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. **DHCP
-usunięte z projektu** (koszt ~3,8 KB z oficjalną biblioteką nie mieścił się razem ze stroną WWW,
-a poza WWW nie było go sensu trzymać dla jednego wariantu — patrz §9) — `Ethernet.begin(mac, ip,
-myDns, gateway, subnet)` woła się **zawsze bezpośrednio**, bez retry-loop ani fallbacku.
-**IP pokazywane na LCD (5 s)** przez `lcd.print(Ethernet.localIP())` — uwzględnia ewentualną
-edycję `ip`/`gateway`/`subnet` przez WWW Settings + EEPROM, załadowaną wcześniej przez
-`loadNetConfig()`.
+**Start (`setup()`).** Pierwsze linie: `MCUSR=0; wdt_disable();` — niektóre bootloadery nie
+czyszczą włączonego watchdoga przed skokiem do aplikacji; bez tego, po resecie WDT z krótkim
+timeoutem (np. z przycisku Restart), urządzenie wpadłoby w pętlę resetów. Splash LCD (2 s) +
+napięcie (3 s) dają czas na rozruch W5500. **DHCP usunięte z projektu** (koszt ~3,8 KB
+z oficjalną biblioteką nie mieścił się razem ze stroną WWW, a poza WWW nie było go sensu
+trzymać dla jednego wariantu — patrz §9) — `Ethernet.begin(mac, ip, myDns, gateway, subnet)`
+woła się **zawsze bezpośrednio**, bez retry-loop ani fallbacku. **IP pokazywane na LCD (5 s)**
+przez `lcd.print(Ethernet.localIP())` — uwzględnia ewentualną edycję `ip`/`gateway`/`subnet`
+przez WWW Settings + EEPROM, załadowaną wcześniej przez `loadNetConfig()`. **Watchdog włączany
+na samym końcu** `setup()` (`wdt_enable(WDTO_8S)`) — musi być **po** wszystkich `delay()`
+powyżej (łącznie do ~10 s w wariancie z `EthModule`/`OTRSP_TCP`), inaczej WDTO_8S (najdłuższy
+pojedynczy timeout AVR) zresetowałby urządzenie w trakcie rozruchu, zanim dojdzie do `loop()`.
 
 ## 5. Wyjścia anten — `tx()`
 
@@ -156,6 +169,9 @@ i kończy (`delay(1); client.stop()`).
   `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
 - `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
+- `R1` — **Restart** (przycisk w Settings): ustawia `pendingRestart`; sam restart (watchdog
+  z timeoutem 15 ms) wykonuje się dopiero na początku **następnej** iteracji `loop()` (patrz §4),
+  żeby klient najpierw dostał pełną, normalnie wyrenderowaną odpowiedź.
 - *(opcja `WWW_EEPROM_NAMES`)* `N{k}={nazwa}` — `k`=`reqBuf[7]` (1..6); `parseName()` dekoduje
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
 - *(opcja `WWW_EEPROM_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
@@ -176,9 +192,13 @@ TRX `.trx` (przyciski anten w pętli, klasy `g`/`gr` = wybrana/kolizja; *(opcja)
 *(opcja)* plakietka PTT; **ikona power Radio Flex** `.flx` na końcu wiersza, `F{s}{0|1}`); karta
 **Opis anten** (`.leg` — legenda numer→nazwa); karta **Settings** (`<details>`, zwinięta) z nazwą
 stacji, nazwami anten (`.nm`), **edytowalną konfiguracją sieciową** (IP/gateway/maska/DNS, pętla
-po 4 polach — oszczędność flash, jak przyciski anten) i **ukrytym odczytem napięcia**. Strona
-odświeża się `meta refresh` co 10 s. Split usunięty. **Flash prawie pełny** — przy zmianach
-HTML/CSS pilnuj budżetu.
+po 4 polach — oszczędność flash, jak przyciski anten) i **przyciskiem Restart** (`/?R1`, patrz
+wyżej). Napięcie **nie jest już** wyświetlane w Settings (usunięte dla oszczędności flash —
+ostrzeżenie w topbarze zostaje). Pole nazwy stacji, pętla nazw anten, pętla sieci i przycisk
+Restart mają niemal identyczny HTML — generowane przez **wspólne stałe PROGMEM**
+(`nmOpen`/`nmMid`/`nmLen11`/`nmClose`, patrz §9 „Watchdog + przycisk Restart") zamiast osobnych
+literałów `F()` z tą samą treścią w każdym bloku. Strona odświeża się `meta refresh` co 10 s.
+Split usunięty. **Flash prawie pełny** — przy zmianach HTML/CSS pilnuj budżetu.
 
 **Wygląd (SQ9FK).** Konwencja designu przeniesiona z projektu
 [`rotator_wifi_bridge`](https://github.com/sq9fk/rotator_wifi_bridge): ciemny motyw teal
@@ -226,30 +246,44 @@ się tylko w wariantach bez strony WWW — **DHCP zostało w całości usunięte
 (`__USE_DHCP__`, retry-loop w `setup()`, `Ethernet.maintain()` w `loop()`); IP jest teraz zawsze
 statyczne, bez wyjątków.
 
-Domyślny build (strona WWW, **static IP edytowalna przez WWW**): **Flash 97,0 %**
-(29794 B) / **RAM 48,2 %** (988 B). Flash **skrajnie ciasny** (~926 B wolne — konfiguracja
-sieciowa edytowalna przez WWW kosztowała dodatkowe ~1 KB względem samego static IP na sztywno).
-Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści** niezależnie od DHCP.
+**Domyślny build to `EthModule` + `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+):
+**Flash 99,2 %** (30474 B) / **RAM 52,5 %** (1075 B) — **zapas ~246 B**. To najciaśniejszy
+z pięciu wariantów (patrz §11) i jest teraz domyślny — każda zmiana we współdzielonym kodzie
+(WWW HTML/CSS, `OTRSP_parse()`, sieć) musi być zbudowana i zmierzona na tym wariancie
+**najpierw**. Ciekawostka: sam kanał TCP (`EthernetServer`/`EthernetClient`) kosztuje więcej
+flash niż kanał USB (`serialEvent()` + `in_buf`), mimo że intuicyjnie wydawałoby się odwrotnie
+— kod OTRSP_TCP (parser + bufor + logika w `loop()`) waży ~968 B. (Uwaga:
+`EthernetClient::connect(hostname)`/`DNSClient::getHostByName` — ~1,2 KB martwego kodu
+ciągniętego przez wirtualną tabelę `EthernetClient` — to koszt **już obecny w każdym buildzie
+z `EthernetClient`**, nawet w najlżejszym WWW-bez-OTRSP, nie coś specyficznego dla
+`OTRSP_TCP`.) Pierwotny niedobór 42 B odzyskano **poprawką logiki reconnect** w bloku
+„OTRSP TCP" (`loop()`, patrz §8) — poprzednia wersja resetowała `otrspClient` przez
+`otrspClient = EthernetClient()` zamiast po prostu wołać `.stop()` na starym połączeniu przy
+zastąpieniu nowym, co dodatkowo **poprawiło poprawność** (stare gniazdo W5500 jest teraz
+zawsze jawnie zamykane). **Oba kanały OTRSP naraz** (`EthModule`+`OTRSP`+`OTRSP_TCP`) nadal
+**nie mieszczą się** (brakuje ~116 B) — `#error` blokuje tę jedną kombinację.
 
-**`EthModule` + `OTRSP` (USB, bez TCP):** **Flash 98,7 %** (30310 B) / RAM 51,5 % (1054 B) —
-**mieści się** (~410 B wolne). **`EthModule` + `OTRSP_TCP`** (bez USB): **Flash 100,0 %**
-(30714 B) / RAM 52,4 % (1074 B) — **mieści się, ale zapas to zaledwie 6 B**. Ciekawostka: sam
-kanał TCP (`EthernetServer`/`EthernetClient`) kosztuje więcej flash niż kanał USB
-(`serialEvent()` + `in_buf`), mimo że intuicyjnie wydawałoby się odwrotnie — kod OTRSP_TCP
-(parser + bufor + logika w `loop()`) waży ~968 B, a domyślny build ma tylko ~926 B wolnego
-miejsca. (Uwaga: `EthernetClient::connect(hostname)`/`DNSClient::getHostByName` — ~1,2 KB
-martwego kodu ciągniętego przez wirtualną tabelę `EthernetClient` — to koszt **już obecny
-w domyślnym buildzie WWW** [97,0 %], nie coś specyficznego dla `OTRSP_TCP`.) Brakujące 42 B
-odzyskano **poprawką logiki reconnect** w bloku „OTRSP TCP" (`loop()`, patrz §8) — poprzednia
-wersja resetowała `otrspClient` przez `otrspClient = EthernetClient()` zamiast po prostu
-wołać `.stop()` na starym połączeniu przy zastąpieniu nowym, co dodatkowo **poprawiło
-poprawność** (stare gniazdo W5500 jest teraz zawsze jawnie zamykane). **Oba kanały naraz**
-(`EthModule`+`OTRSP`+`OTRSP_TCP`) nadal **nie mieszczą się** (brakuje ~116 B) — `#error`
-blokuje tę jedną kombinację.
+**Watchdog + przycisk Restart** (patrz §8) dołożyły **+252 B** do wszystkich wariantów z
+`EthModule` (+46 B sam watchdog, wszystkie warianty; +206 B HTML przycisku Restart, tylko
+`EthModule`) — domyślny build (wtedy jeszcze bez zapasu, 100,0 %/30716 B) **przestał się
+mieścić o 248 B**. Odzyskano **494 B** przez (a) usunięcie wyświetlania napięcia z Settings
+(zostało tylko ostrzeżenie — czerwona kropka w topbarze, sama wartość liczbowa nie była
+niczym więcej niż ciekawostką) i (b) wydzielenie **wspólnych stałych PROGMEM**
+(`nmOpen`/`nmMid`/`nmLen11`/`nmClose`, patrz §7) dla pól Settings — nazwa stacji, pętla nazw
+anten i pętla sieci miały niemal identyczny HTML zapisany jako 3 osobne literały `F()` (kompi­
+lator NIE scala automatycznie różnych literałów `F()`, nawet jeśli mają wspólne podłańcuchy).
+Efekt netto: domyślny build ma teraz **większy zapas niż przed dodaniem watchdoga/Restart**
+(246 B vs pierwotne 4 B).
+
+**Strona WWW bez OTRSP** (`EthModule` samo, static IP edytowalna przez WWW) — bezpieczniejszy
+wybór z dużym zapasem, jeśli OTRSP-TCP nie jest potrzebne: **Flash 96,2 %** (29552 B) /
+**RAM 48,3 %** (989 B), ~1,1 KB wolne. **`EthModule` + `OTRSP`** (USB, bez TCP): **Flash 97,9 %**
+(30070 B) / RAM 51,5 % (1055 B) — zapas ~650 B. Build z wszystkim WŁ. (BCD+PTT+strona WWW)
+**już się nie mieści** niezależnie od wariantu OTRSP.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
-sam Ethernet. Bez WWW: `OTRSP` po USB (bez TCP, bez Ethernetu) = **37,9 %** (11634 B); + `OTRSP_TCP`
-(USB+TCP równolegle) = **70,3 %** (21606 B).
+sam Ethernet. Bez WWW (watchdog dolożył tu tylko +46 B): `OTRSP` po USB (bez TCP, bez
+Ethernetu) = **38,0 %** (11680 B); + `OTRSP_TCP` (USB+TCP równolegle) = **70,5 %** (21652 B).
 
 *Historia (przed usunięciem DHCP z projektu):* DHCP kosztowało dodatkowo ~3,8 KB
 (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne osobno od reszty biblioteki). Strona WWW + DHCP
@@ -262,7 +296,12 @@ Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
 - generowanie przycisków WWW i listy nazw w **pętli** (mniej powtórzonych łańcuchów `F()`);
   konfiguracja sieciowa (IP/gateway/maska/DNS) tym samym wzorcem (`netCfg[4]` + PROGMEM etykiety
-  `netLbl[]`/`netCode[]`) zamiast 4 rozwiniętych bloków — istotne przy ~900 B zapasu;
+  `netLbl[]`/`netCode[]`) zamiast 4 rozwiniętych bloków — istotne przy ~246 B zapasu domyślnego
+  buildu;
+- **wspólne stałe PROGMEM dla pól Settings** (`nmOpen`/`nmMid`/`nmLen11`/`nmClose`) — nazwa
+  stacji, pętla nazw anten, pętla sieci i przycisk Restart miały niemal identyczny HTML
+  zapisany jako osobne literały `F()` (kompilator NIE scala różnych literałów `F()`, nawet
+  z identycznymi podłańcuchami) — odzyskano ~440 B;
 - **`BufP`** — buforowanie **całego** wyjścia strony (RAM, porcje 128 B) zamiast per-znak `send()`
   do W5500: kilkadziesiąt segmentów TCP zamiast tysiąca → **znacznie szybsze wyświetlanie** i krótsza
   blokada `loop()`. Static (nagłówek/CSS/ikona) i dynamiczny HTML tym samym buforem;
@@ -292,15 +331,16 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 - Kompilacja: `pio run -e nanoatmega328` (0 ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki
   `Ethernet` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` — razem ze
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
-- **Pięć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) domyślny (`EthModule`,
-  strona WWW, static IP, 97,0%); (2) `#define EthModule` +
-  `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 98,7%); (3) `#define EthModule` +
-  `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP, **100,0% — zapas zaledwie 6 B**,
-  najpierw sprawdzaj tę gałąź przy jakiejkolwiek zmianie w WWW/CSS/OTRSP_TCP — najłatwiej ją
-  zepsuć); (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 37,9%); (5)
-  `#define OTRSP` + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW,
-  70,3%). Kombinacja `EthModule` + `OTRSP` +
-  `OTRSP_TCP` (wszystkie trzy naraz) **musi** dać `#error` w compile-time (celowe zabezpieczenie
-  — brakuje ~116 B, patrz §9; nie regresja).
+- **Pięć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) **domyślny** —
+  `#define EthModule` + `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP,
+  **99,2% — zapas ~246 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
+  każdej zmianie w WWW/CSS/OTRSP_TCP/sieci, bo trafia do każdego kto skompiluje projekt bez
+  ruszania `#define`; (2) `#define EthModule` + `//#define OTRSP` + `//#define OTRSP_TCP`
+  (strona WWW bez OTRSP, static IP, 96,2%, zapas ~1,1 KB — bezpieczniejsza alternatywa); (3)
+  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 97,9%);
+  (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 38,0%); (5) `#define OTRSP`
+  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 70,5%).
+  Kombinacja `EthModule` + `OTRSP` + `OTRSP_TCP` (wszystkie trzy naraz) **musi** dać `#error`
+  w compile-time (celowe zabezpieczenie — brakuje ~116 B, patrz §9; nie regresja).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
   stacji (brak sprzętu w CI).

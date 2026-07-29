@@ -7,9 +7,11 @@ Wskazówki dla Claude Code przy pracy nad tym repozytorium.
 Firmware sterownika przełącznika antenowego **6 anten × 2 TRX** dla stacji SP9PDF.
 Bazuje na RemoteQTH 6×2 Antenna Controller (OK1HRA, rev 0.3), zmodyfikowany przez SQ9FK.
 Cel: dwa transceivery bezkolizyjnie współdzielą zestaw anten. Sterowanie ręczne
-(enkoder/LCD + interfejs WWW). Automatyka BCD z radia, blokowanie przez PTT i OTRSP to
+(enkoder/LCD + interfejs WWW). Automatyka BCD z radia, blokowanie przez PTT i OTRSP po USB to
 funkcje **opcjonalne** (`#ifdef`, patrz „Funkcje opcjonalne") — domyślnie **wyłączone**.
-Wykrywanie kolizji między TRX działa zawsze.
+**OTRSP po TCP jest domyślnie WŁĄCZONE** razem ze stroną WWW (np. do N1MM+, port 4534) —
+to obecny build domyślny, patrz „Budżet pamięci" niżej. Wykrywanie kolizji między TRX działa
+zawsze.
 
 ## Platforma i budowanie
 
@@ -20,10 +22,14 @@ Wykrywanie kolizji między TRX działa zawsze.
   Ethernet2`, przestarzała/nieutrzymywana, zastąpiona 2026-07-29) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
-  już się NIE mieszczą (te opcje tylko bez `EthModule`). Domyślnie: **Ethernet WŁ. (strona WWW,
-  static IP), OTRSP/OTRSP_TCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES WŁ.** — Flash
-  **97,0%** (29794 B) / RAM **48,2%** (988 B), ~926 B wolne — skrajnie ciasno. Przy dokładaniu
-  do WWW pilnuj budżetu (odchudź CSS/markup, generuj w pętli zamiast rozwijać kod).
+  już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
+  `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
+  WWW_EEPROM_NAMES WŁ.** — Flash **99,2%** (30474 B) / RAM **52,5%** (1075 B), **zapas ~246 B**.
+  To NAJCIASNIEJSZY z pieciu wariantow i jest domyslny — KAZDA zmiana we wspoldzielonym kodzie
+  (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na tym wariancie NAJPIERW.
+  Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
+  rozwijac kod, wydziel powtarzajace sie fragmenty PROGMEM do wspolnych stalych - patrz `nmOpen`/
+  `nmMid`/`nmLen11`/`nmClose` nizej).
   **Oficjalna biblioteka Ethernet jest większa niż Ethernet2** (auto-detekcja W5100/W5200/W5500
   w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP usuniete z projektu**
   (2026-07-29) — kosztowalo ~3,8 KB (`Dhcp.cpp`+`EthernetUdp.cpp`), przydatne bylo tylko
@@ -38,21 +44,41 @@ Wykrywanie kolizji między TRX działa zawsze.
   USB). Serial i EthernetClient dziedzicza po `Print` — nie duplikuj logiki komend przy zmianach.
   **Piec wariantow** (`#error` wymusza wykluczenie TYLKO wszystkich trzech naraz —
   `EthModule`+`OTRSP`+`OTRSP_TCP` razem NIE miesci sie, brakuje ~116 B; kazda inna kombinacja
-  dziala): (1) `EthModule` — strona WWW (static IP), 97,0% (29794 B); (2) `EthModule`+`OTRSP` —
-  strona WWW + OTRSP po USB, **98,7%** (30310 B, zapas ~410 B); (3) `EthModule`+`OTRSP_TCP` —
-  strona WWW + OTRSP po TCP, **100,0%** (30714 B) **— zapas ZALEDWIE 6 B** (skrajnie ciasne;
-  przy jakiejkolwiek zmianie w kodzie WWW/CSS/OTRSP_TCP buduj TEN wariant jako pierwszy, bo
-  najlatwiej go zepsuc); (4) `OTRSP` — OTRSP tylko po USB, bez Ethernetu, ~38% (11634 B); (5)
-  `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534)
-  jednoczesnie, bez strony WWW, **70,3%** (21606 B). Uwaga: `DNSClient::getHostByName`/wirtualna
-  metoda `connect(hostname)` w
-  `EthernetClient` (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna)
-  to koszt JUZ OBECNY w domyslnym buildzie WWW (97,0%) — nie jest to specyficzne dla `OTRSP_TCP`.
-  Rzeczywisty powod niedoboru bajtow przy WWW+OTRSP_TCP: kod `OTRSP_TCP` (parser+bufor+petla)
-  wazy ~968 B, a domyslny build ma tylko ~926 B zapasu — brakujace 42 B odzyskano poprawka
-  logiki reconnect w bloku "OTRSP TCP" (`.stop()` na starym polaczeniu przy zastapieniu nowym
-  klientem zamiast `otrspClient = EthernetClient()`, patrz `loop()`), przy okazji poprawiajac
-  tez poprawnosc (gniazdo W5500 jest teraz zawsze jawnie zamykane).
+  dziala): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **99,2%**
+  (30474 B) **— zapas ~246 B**; (2) `EthModule` — strona WWW bez OTRSP, 96,2% (29552 B,
+  zapas ~1,1 KB, bezpieczniejszy jesli OTRSP-TCP niepotrzebne); (3) `EthModule`+`OTRSP` — strona
+  WWW + OTRSP po USB, **97,9%** (30070 B, zapas ~650 B); (4) `OTRSP` — OTRSP tylko po USB, bez
+  Ethernetu, 38,0% (11680 B); (5) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
+  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **70,5%** (21652 B).
+  Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w `EthernetClient`
+  (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna) to koszt JUZ
+  OBECNY w kazdym buildzie z `EthernetClient` (nawet w najlzejszym WWW-bez-OTRSP) — nie jest to
+  specyficzne dla `OTRSP_TCP`. Etykiety pol w Settings (`.nm b`) maja `flex:0 0 4.3rem` (nie
+  `min-width`) - stala szerokosc, zeby input zawsze zaczynal sie w tym samym miejscu
+  niezaleznie od dlugosci etykiety ("Gateway" vs "IP").
+- **Watchdog (`<avr/wdt.h>`, zawsze wlaczony, wszystkie warianty):** `MCUSR=0; wdt_disable();`
+  na SAMYM POCZATKU `setup()` (niektore bootloadery zostawiaja WDT wlaczony z krotkim timeoutem
+  po poprzednim resecie - bez tego byla by petla resetow). `wdt_enable(WDTO_8S)` na SAMYM KONCU
+  `setup()` - MUSI byc PO wszystkich `delay()` przy starcie (splash+napiecie+IP, lacznie do ~10 s
+  w wariancie EthModule/OTRSP_TCP) - WDTO_8S to najdluzszy pojedynczy timeout AVR, wlaczenie go
+  wczesniej zresetowaloby urzadzenie w trakcie rozruchu. `wdt_reset()` na samym poczatku `loop()`
+  - jesli petla sie zawiesi (WWW/TCP/USB/cokolwiek), reset po ~8 s. Koszt: ~46 B flash.
+- **Przycisk Restart w Settings (`#if defined(EthModule)`):** `/?R1` ustawia `pendingRestart`
+  (flaga globalna), restart wykonuje sie DOPIERO na POCZATKU NASTEPNEJ iteracji `loop()` (po
+  `wdt_reset()`) - `wdt_enable(WDTO_15MS); while(1){}` - zeby klient najpierw dostal PELNA
+  odpowiedz (strona renderuje sie normalnie, `out.done()`, potem dopiero restart). Skrocony
+  timeout WDT to jedyny niezawodny sposob softwarowego resetu na AVR (czysci tez peryferia, nie
+  tylko licznik rozkazow - NIE uzywaj skoku na adres 0). Koszt z HTML przycisku: ~206 B (patrz
+  nizej - wiekszosc kosztu to sam string).
+  **Napiecie usuniete z Settings** (bylo tylko do wgladu, nie wplywalo na nic poza wyswietlaniem)
+  - ostrzezenie (czerwona kropka w topbarze, `vv` w generowaniu strony) zostaje, bo jest tanie
+    i uzywane gdzie indziej.
+  **Wspolne stale PROGMEM dla pol Settings** (`nmOpen`/`nmMid`/`nmLen11`/`nmClose`, deklarowane
+  przy `POWER_SVG`) - pole nazwy stacji, petla nazw anten (1-6), petla sieci (IP/gateway/maska/
+  DNS) i przycisk Restart mialy NIEMAL IDENTYCZNY HTML zapisany jako osobne literaly `F()` (3-4x
+  zdublowany `<div class="nm"><b>...`/`</b><form method="get" style="display:inline">...` itd.) -
+  wydzielenie do wspolnych stalych odzyskalo ~440 B. **Jesli dodajesz nowe pole do Settings,
+  UZYWAJ tych stalych zamiast pisac nowy literal `F()` z tym samym HTML.**
 - **Konfiguracja sieciowa edytowalna przez WWW** (`netCfg[4]` = wskaźniki na `ip/gateway/subnet/
   myDns`, `loadNetConfig()`/`saveNetConfig()`, `parseIPField()` używa `IPAddress::fromString` —
   **nie pisz własnego parsera dotted-decimal**, biblioteka go ma). IP nie są już „na sztywno" —
@@ -71,10 +97,12 @@ Wykrywanie kolizji między TRX działa zawsze.
   **Układ strony** (ciemny teal,
   wg [[project-rotator-wifi-bridge]]): topbar (`.tb` = nazwa stacji + kropka napięcia), karta
   **Anteny** (nagłówek `.ahead` + statusy sekcji `.astat`/`.st` 50/50, wiersze `.trx` z przyciskami
-  i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa stacji,
-  nazwy anten, ukryte napięcie). **Flash prawie pełny — przy zmianach HTML/CSS pilnuj budżetu.**
+  i ikoną Flex `.flx`), karta **Opis anten** (`.leg`), karta **Settings** (`<details>`: nazwa
+  stacji, nazwy anten, sieć, przycisk Restart — **bez** napięcia, usunięte). **Flash prawie
+  pełny — przy zmianach HTML/CSS pilnuj budżetu.**
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
-  bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; przy `WWW_EEPROM_NAMES` też
+  bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; `R1` = Restart (patrz
+  „Budżet pamięci" wyżej); przy `WWW_EEPROM_NAMES` też
   `N{k}={nazwa}` (antena), `NS={nazwa}` (nazwa stacji), `N{I|G|M|D}={a.b.c.d}` (IP/gateway/maska/
   DNS) od `reqBuf[6]`), z walidacją cyfr i
   `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +
@@ -176,8 +204,9 @@ wszystkimi miejscami dotyczącymi danej zmiany:
 - Kompilacja: `pio run` (bez ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki `Ethernet`
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
   `#ifdef` nie uległy rozjechaniu. **Pięć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
-  — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` ma
-  zapas zaledwie ~6 B — buduj go w pierwszej kolejności, najłatwiej go zepsuć.
+  — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` to
+  **domyślny build** i ma zapas ~246 B — buduj go PIERWSZY (nie ostatni) przy każdej zmianie,
+  bo to on trafi do każdego, kto skompiluje projekt bez modyfikacji `#define`.
 - **Wygląd interfejsu WWW i protokół OTRSP** można podejrzeć bez sprzętu: `tools/websim.html`
   (odtwarza HTML/CSS firmware + symuluje `OTRSP_parse()` — dwa niezależne monitory USB/TCP,
   TX/RX kolorowane) lub `python tools/serve.py`. Przy zmianie HTML strony **lub** logiki
