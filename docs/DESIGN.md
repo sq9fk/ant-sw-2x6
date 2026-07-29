@@ -23,8 +23,7 @@ Wszystkie `#define` są na górze `src/main.ino`.
 |-------|------|-----------|
 | `Ports` | 2 | liczba TRX / linii LCD (2–4) |
 | `Inputs` | 6 | liczba anten (etykieta „6x2") |
-| `EthModule` | **wł.** | Ethernet W5500 + serwer WWW |
-| `__USE_DHCP__` | **wył.** | DHCP dla Ethernetu (koszt ~3,8 KB flash z oficjalną biblioteką — domyślnie static IP) |
+| `EthModule` | **wł.** | Ethernet W5500 + serwer WWW (zawsze static IP, bez DHCP) |
 | `WWW_EEPROM_NAMES` | **wł.** | edycja nazw anten przez WWW + zapis EEPROM |
 | `ANT_MAXLEN` | 11 | limit długości nazwy anteny (szerokość LCD) |
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
@@ -79,8 +78,7 @@ Kolejność w każdej iteracji:
    - jeśli kolizja → `port[i][3]=1`, wyjście OFF; inaczej → wyjście = żądanie
      *(przy `PTT_BLOCKING` przełączenie wstrzymane, gdy PTT aktywne)*;
    - `tx()` wystawia wyjścia na ekspander OUT.
-3. **(opcja `EthModule`/`OTRSP_TCP`)** — `Ethernet.maintain()` (odnawianie dzierżawy DHCP) +
-   *(opcja `EthModule`)* obsługa jednego klienta strony WWW (patrz §7) + *(opcja `OTRSP_TCP`)*
+3. **(opcja `EthModule`)** obsługa jednego klienta strony WWW (patrz §7) + *(opcja `OTRSP_TCP`)*
    obsługa **trwałego** połączenia OTRSP-TCP (patrz §6 — inny model niż request/response WWW).
 4. **(opcja `serialECHO`)** — telemetria na serial.
 5. **Przycisk** — długie naciśnięcie przełącza `menu1state` (tryb edycji enkoderem).
@@ -88,15 +86,13 @@ Kolejność w każdej iteracji:
    LOW/HIGH są **nieblokujące** (znacznik `voltWarn`, ~2 s bez `delay()`) — awaria napięcia nie
    zamraża WWW/przełączania/enkodera.
 
-**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. **Domyślnie
-`__USE_DHCP__` wyłączone** — static IP (`ip/gateway/subnet`), koszt DHCP z oficjalną biblioteką
-(~3,8 KB) nie mieści się razem ze stroną WWW (patrz §9). Gdy `__USE_DHCP__` włączone: DHCP jest
-**ponawiany** (`while Ethernet.begin(mac, 6000, 4000)==0`, timeout **6 s/próbę jako parametr**
-— oficjalna biblioteka eksponuje go wprost, bez patchowania `Dhcp.h` jak dawniej), a po 3
-nieudanych próbach **fallback na static IP**. **IP pokazywane na LCD (5 s)** przez
-`lcd.print(Ethernet.localIP())` — zawsze rzeczywisty, aktualnie aktywny adres (uwzględnia
-ewentualną edycję `ip`/`gateway`/`subnet` przez WWW Settings + EEPROM, załadowaną wcześniej
-przez `loadNetConfig()`), niezależnie od trybu static/DHCP.
+**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. **DHCP
+usunięte z projektu** (koszt ~3,8 KB z oficjalną biblioteką nie mieścił się razem ze stroną WWW,
+a poza WWW nie było go sensu trzymać dla jednego wariantu — patrz §9) — `Ethernet.begin(mac, ip,
+myDns, gateway, subnet)` woła się **zawsze bezpośrednio**, bez retry-loop ani fallbacku.
+**IP pokazywane na LCD (5 s)** przez `lcd.print(Ethernet.localIP())` — uwzględnia ewentualną
+edycję `ip`/`gateway`/`subnet` przez WWW Settings + EEPROM, załadowaną wcześniej przez
+`loadNetConfig()`.
 
 ## 5. Wyjścia anten — `tx()`
 
@@ -225,10 +221,12 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 na oficjalną `arduino-libraries/Ethernet`. Oficjalna biblioteka jest **większa** — obsługuje
 W5100/W5200/W5500 z auto-detekcją chipu w runtime (kod dla wszystkich trzech zawsze skompilowany,
 brak `#define`a ograniczającego do samego W5500, w przeciwieństwie do Ethernet2 pisanej wyłącznie
-pod W5500). Efekt: **domyślny build (strona WWW) z DHCP przestał się mieścić** — stąd DHCP
-wyłączone domyślnie (patrz niżej).
+pod W5500). Efekt: **domyślny build (strona WWW) z DHCP przestał się mieścić**, a DHCP przydawało
+się tylko w wariantach bez strony WWW — **DHCP zostało w całości usunięte z projektu**
+(`__USE_DHCP__`, retry-loop w `setup()`, `Ethernet.maintain()` w `loop()`); IP jest teraz zawsze
+statyczne, bez wyjątków.
 
-Domyślny build (strona WWW, **static IP edytowalna przez WWW**, DHCP wył.): **Flash 97,0 %**
+Domyślny build (strona WWW, **static IP edytowalna przez WWW**): **Flash 97,0 %**
 (29794 B) / **RAM 48,2 %** (988 B). Flash **skrajnie ciasny** (~926 B wolne — konfiguracja
 sieciowa edytowalna przez WWW kosztowała dodatkowe ~1 KB względem samego static IP na sztywno).
 Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści** niezależnie od DHCP.
@@ -250,12 +248,15 @@ poprawność** (stare gniazdo W5500 jest teraz zawsze jawnie zamykane). **Oba ka
 blokuje tę jedną kombinację.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
-sam Ethernet. **DHCP kosztuje dodatkowo ~3,8 KB** (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne
-osobno od reszty biblioteki). Zmierzone (usunięcie ciała `if (client) {...}` strony WWW, zastąpione
-zaślepką accept+close): Ethernet bez DHCP i bez strony WWW = **72,5 %** (22270 B); + `OTRSP` po
-USB = **74,1 %** (22772 B); + `OTRSP_TCP` (USB+TCP równolegle) **z DHCP włączonym** = **82,8 %**
-(25422 B) — tu jest zapas (~5,3 KB), więc ten wariant DHCP zostawia włączone. Strona WWW +
-DHCP razem = **106,3 %** (32650 B) — **nie mieści się**, stąd domyślnie static IP dla `EthModule`.
+sam Ethernet. Bez WWW: `OTRSP` po USB (bez TCP, bez Ethernetu) = **37,9 %** (11634 B); + `OTRSP_TCP`
+(USB+TCP równolegle) = **70,3 %** (21606 B).
+
+*Historia (przed usunięciem DHCP z projektu):* DHCP kosztowało dodatkowo ~3,8 KB
+(`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne osobno od reszty biblioteki). Strona WWW + DHCP
+razem = **106,3 %** (32650 B) — **nie mieściło się**, co był głównym powodem, dla którego DHCP
+było domyślnie wyłączone dla `EthModule`, a docelowo — skoro dawało realną korzyść tylko
+w wariancie `OTRSP`+`OTRSP_TCP` bez WWW (tam był zapas ~5,3 KB) — usunięte z projektu w całości
+zamiast trzymane jako opcja dla jednego przypadku.
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
@@ -275,7 +276,7 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 
 | Funkcja | Miejsca w kodzie |
 |---------|------------------|
-| `EthModule` \| `OTRSP_TCP` | mac/ip/gateway/subnet + DHCP+fallback w `setup()`, `Ethernet.maintain()` w `loop()` — **wspólne** dla obu |
+| `EthModule` \| `OTRSP_TCP` | mac/ip/gateway/subnet + `Ethernet.begin(mac,ip,myDns,gateway,subnet)` w `setup()` — **wspólne** dla obu |
 | `EthModule` | `server(80)`, `HTTP_HEAD*`, `POWER_SVG`, `BufP`, sekcja serwera WWW w `loop()` |
 | `OTRSP_TCP` | `otrspServer`/`otrspClient`/`otrsp_tcp_buf`/`otrsp_tcp_len`, sekcja „OTRSP TCP" w `loop()` |
 | `WWW_EEPROM_NAMES` | deklaracja `antRAM`/`siteRAM`/`antName`/`siteName`/EEPROM, `setup()` (`loadAntNames`), parser (`N`/`NS`) i formularze Settings, rozmiar `reqBuf` |
@@ -292,15 +293,14 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
   `Ethernet` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` — razem ze
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
 - **Pięć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) domyślny (`EthModule`,
-  strona WWW, `__USE_DHCP__` **wył.** — static IP, 97,0%); (2) `#define EthModule` +
+  strona WWW, static IP, 97,0%); (2) `#define EthModule` +
   `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 98,7%); (3) `#define EthModule` +
   `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP, **100,0% — zapas zaledwie 6 B**,
   najpierw sprawdzaj tę gałąź przy jakiejkolwiek zmianie w WWW/CSS/OTRSP_TCP — najłatwiej ją
   zepsuć); (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 37,9%); (5)
   `#define OTRSP` + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW,
-  `__USE_DHCP__` można zostawić **wł.** — ma zapas, 82,5%). Kombinacja `EthModule` + `OTRSP` +
+  70,3%). Kombinacja `EthModule` + `OTRSP` +
   `OTRSP_TCP` (wszystkie trzy naraz) **musi** dać `#error` w compile-time (celowe zabezpieczenie
-  — brakuje ~116 B, patrz §9; nie regresja). Kombinacja `EthModule` + `__USE_DHCP__` **musi się
-  nie mieścić** (106,3% — celowe, nie regresja).
+  — brakuje ~116 B, patrz §9; nie regresja).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
   stacji (brak sprzętu w CI).

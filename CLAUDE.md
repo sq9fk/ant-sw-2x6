@@ -21,14 +21,17 @@ Wykrywanie kolizji między TRX działa zawsze.
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). Domyślnie: **Ethernet WŁ. (strona WWW,
-  static IP), OTRSP/OTRSP_TCP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES WŁ.** — Flash
+  static IP), OTRSP/OTRSP_TCP WYŁ., BCD/PTT WYŁ., WWW_EEPROM_NAMES WŁ.** — Flash
   **97,0%** (29794 B) / RAM **48,2%** (988 B), ~926 B wolne — skrajnie ciasno. Przy dokładaniu
   do WWW pilnuj budżetu (odchudź CSS/markup, generuj w pętli zamiast rozwijać kod).
   **Oficjalna biblioteka Ethernet jest większa niż Ethernet2** (auto-detekcja W5100/W5200/W5500
-  w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP dokłada ~3,8 KB**
-  (`Dhcp.cpp`+`EthernetUdp.cpp`), dlatego **wyłączone domyślnie** dla strony WWW (`//#define
-  __USE_DHCP__`) — static IP (`ip`/`gateway`/`subnet` w kodzie). Sama strona WWW (HTML/CSS/
-  `BufP`/print-y) kosztuje dodatkowo ~8 KB — nie sam Ethernet.
+  w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP usuniete z projektu**
+  (2026-07-29) — kosztowalo ~3,8 KB (`Dhcp.cpp`+`EthernetUdp.cpp`), przydatne bylo tylko
+  w wariantach bez strony WWW; nie warto bylo trzymac calej sciezki kodu (`__USE_DHCP__`,
+  retry-loop w `setup()`, `Ethernet.maintain()` w `loop()`) dla tego jednego przypadku. IP jest
+  zawsze statyczne (`ip`/`gateway`/`subnet` w kodzie, edytowalne tez przez WWW+EEPROM przy
+  `WWW_EEPROM_NAMES`). Sama strona WWW (HTML/CSS/`BufP`/print-y) kosztuje dodatkowo ~8 KB — nie
+  sam Ethernet.
   **`OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) SA NIEZALEZNE** — kazdy moze byc wlaczony osobno
   albo razem (wspolny `OTRSP_parse(char*, Print&)` kompiluje sie przy `#if defined(OTRSP) ||
   defined(OTRSP_TCP)`; `serialEvent()`/`in_buf` zostaja pod samym `OTRSP`, bo sa specyficzne dla
@@ -41,8 +44,8 @@ Wykrywanie kolizji między TRX działa zawsze.
   przy jakiejkolwiek zmianie w kodzie WWW/CSS/OTRSP_TCP buduj TEN wariant jako pierwszy, bo
   najlatwiej go zepsuc); (4) `OTRSP` — OTRSP tylko po USB, bez Ethernetu, ~38% (11634 B); (5)
   `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534)
-  jednoczesnie, bez strony WWW, **82,5%** (25330 B) z DHCP wlaczonym (ma zapas ~5,3 KB, mozna
-  zostawic wlaczone). Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w
+  jednoczesnie, bez strony WWW, **70,3%** (21606 B). Uwaga: `DNSClient::getHostByName`/wirtualna
+  metoda `connect(hostname)` w
   `EthernetClient` (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna)
   to koszt JUZ OBECNY w domyslnym buildzie WWW (97,0%) — nie jest to specyficzne dla `OTRSP_TCP`.
   Rzeczywisty powod niedoboru bajtow przy WWW+OTRSP_TCP: kod `OTRSP_TCP` (parser+bufor+petla)
@@ -124,7 +127,7 @@ w `hw/` bez potrzeby — to materiał źródłowy autora.
 - **Model stanu**: tablica `port[8][6]` — wiersze 0–3 = wejścia TRX1–4, 4–7 = wyjścia.
   Kolumny: `{adres_I2C, wybrana_antena, PTT, kolizja, tryb_ręczny, część(bank)}`.
 - **Konfiguracja przez `#define`** na początku pliku: `Ports` (2 lub 4), `Inputs`,
-  `inputHigh`, `SERBAUD`, `EthModule`, `__USE_DHCP__`, `OTRSP`/`OTRSP_DEBUG`/`OTRSP_TCP`/
+  `inputHigh`, `SERBAUD`, `EthModule`, `OTRSP`/`OTRSP_DEBUG`/`OTRSP_TCP`/
   `OTRSP_TCP_PORT` oraz flagi funkcji `WWW_EEPROM_NAMES`, `BCD_INPUT`, `PTT_BLOCKING`, `ANT_MAXLEN`
   (patrz „Funkcje opcjonalne").
 - **I²C / MCP23017**: `0x20`/`0x22` = wyjścia, `0x21`/`0x23` = wejścia (patrz

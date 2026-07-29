@@ -64,10 +64,9 @@
   Changelog:
   2016-12 change to rev 0.3 pinout
 
-  SQ9FK: dawniej patchowano Dhcp.h biblioteki, zeby skrocic domyslny timeout DHCP (60s->6s).
-  Od migracji na oficjalna biblioteke arduino-libraries/Ethernet (2026-07-29, byla adafruit/
-  Ethernet2 - przestarzala) timeout jest parametrem Ethernet.begin(mac, timeout, responseTimeout)
-  - patch biblioteki juz niepotrzebny, patrz wywolanie w setup().
+  SQ9FK: DHCP usuniete z projektu (2026-07-29) - IP jest zawsze statyczne, edytowalne przez
+  WWW+EEPROM (patrz netCfg[] w setup()). Powod: DHCP kosztuje ~3,8 KB flash z oficjalna
+  biblioteka arduino-libraries/Ethernet, a przy stronie WWW budzet ATmega328 tego nie miesci.
 
 
   
@@ -186,12 +185,10 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 //#define OTRSP_DEBUG
 #define SERBAUD    9600    // [baud] Serial port baudrate
 #define EthModule        // enable Ethernet module
-// SQ9FK: DHCP WYLACZONE domyslnie (static IP - patrz ip/gateway/subnet nizej, ustaw pod siec
-// docelowa). Powod: obsluga DHCP w oficjalnej bibliotece Arduino Ethernet kosztuje ~3,8 KB flash
-// (Dhcp.cpp+EthernetUdp.cpp) - ze strona WWW (EthModule) budzet ATmega328 tego nie miesci razem
-// z DHCP. Warianty z zapasem (np. OTRSP+OTRSP_TCP, bez strony WWW) MOGA odkomentowac ta linie -
-// tam DHCP sie miesci (patrz docs/DESIGN.md).
-//#define __USE_DHCP__       // Uncomment to Enable DHCP
+// SQ9FK: DHCP usuniete z projektu - IP zawsze statyczne (patrz ip/gateway/subnet nizej, ustaw
+// pod siec docelowa; edytowalne tez przez WWW+EEPROM przy WWW_EEPROM_NAMES). Powod: obsluga
+// DHCP w oficjalnej bibliotece Arduino Ethernet kosztowala ~3,8 KB flash, a przydatna byla
+// tylko w wariantach bez strony WWW - nie warto trzymac calej sciezki kodu dla tego przypadku.
 //====================================================================
 // SQ9FK: OTRSP (USB) i OTRSP_TCP sa NIEZALEZNE - kazdy moze byc wlaczony osobno (wspolny parser
 // OTRSP_parse() kompiluje sie, gdy zdefiniowany jest ktorykolwiek z nich). Oba (osobno) MIESZCZA
@@ -217,8 +214,8 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
 #if defined(EthModule) || defined(OTRSP_TCP)
   // SQ9FK: mac/ip/gateway/subnet wspolne dla strony WWW (EthModule) i surowego TCP (OTRSP_TCP).
-  // Domyslnie static IP (bez __USE_DHCP__) - dostosuj ip/gateway/subnet pod siec docelowa.
-  // Przy __USE_DHCP__ te wartosci sluza jako fallback po nieudanych probach DHCP (patrz setup()).
+  // IP zawsze statyczne (bez DHCP) - dostosuj ip/gateway/subnet ponizej pod siec docelowa
+  // (lub edytuj po flashowaniu przez WWW+EEPROM, patrz WWW_EEPROM_NAMES nizej).
   byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
   IPAddress ip(192, 168, 5, 45);         // IP
   IPAddress gateway(192, 168, 5, 254);    // GATE
@@ -492,26 +489,8 @@ void setup()
   delay(3000);      // pokaz napiecie zasilania na LCD (3 s)
   lcd.clear();
 #if defined(EthModule) || defined(OTRSP_TCP)
-// SQ9FK: bring-up sprzetu sieciowego (DHCP+fallback) wspolny dla strony WWW i surowego TCP OTRSP.
-#if defined(__USE_DHCP__)
-  // DHCP z ponawianiem (router bywa wolny przy starcie). SQ9FK: oficjalna biblioteka Ethernet
-  // przyjmuje timeout jako parametr begin() - 6 s/proba (bylo 60 s domyslne w Ethernet2, wymagalo
-  // patchowania Dhcp.h). 3 proby x 6 s = do ~18 s zamiast do 180 s, potem fallback na static IP.
-  byte dhcpTry = 0;
-  while (Ethernet.begin(mac, 6000, 4000) == 0) {
-    dhcpTry++;
-    lcd.clear();
-    lcd.setCursor(1, Ports / 2 - 1);
-    lcd.print(F("DHCP... proba "));
-    lcd.print(dhcpTry);
-    if (dhcpTry >= 3) {
-      Ethernet.begin(mac, ip, myDns, gateway, subnet);   // brak DHCP -> static IP (osiagalny zdalnie)
-      break;
-    }
-  }
-#else
+// SQ9FK: bring-up sprzetu sieciowego (static IP) wspolny dla strony WWW i surowego TCP OTRSP.
   Ethernet.begin(mac, ip, myDns, gateway, subnet);
-#endif
 #if defined(EthModule)
   server.begin();          // strona WWW (port 80)
 #endif
@@ -576,11 +555,6 @@ void loop() {
     }
   }
   //=====[ Ethernet ]=================
-#if defined(EthModule) || defined(OTRSP_TCP)
-#if defined(__USE_DHCP__)
-  Ethernet.maintain();   // SQ9FK: odnawianie dzierzawy DHCP (nieblokujace); bez tego IP moze przepasc
-#endif
-#endif
 #if defined(EthModule)
   EthernetClient client = server.available();
   if (client) {

@@ -66,16 +66,16 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
 - **Ostrzeżenia napięciowe** na LCD przy zbyt niskim/wysokim napięciu zasilania — **nieblokujące**
   (nie zamrażają WWW/przełączania podczas awarii).
-- **Odporny start sieci** (opcja `__USE_DHCP__`) — DHCP ponawiane (6 s/próbę) z **fallbackiem na
-  static IP** po 3 próbach (urządzenie zawsze osiągalne) + `Ethernet.maintain()` (odnawianie
-  dzierżawy). **Domyślnie WYŁĄCZONE** (static IP) — patrz niżej, migracja biblioteki.
+- **Zawsze static IP** — bez DHCP (usunięte z projektu, patrz niżej) — urządzenie startuje pod
+  stałym adresem, ustawionym w `src/main.ino` lub edytowalnym po flashowaniu przez WWW+EEPROM
+  (patrz „Konfiguracja sieciowa" wyżej), IP na LCD widoczne od razu przy starcie.
 - Optymalizacja rozmiaru firmware (PROGMEM, pętle WWW) i utwardzenie serwera WWW.
 - **Biblioteka Ethernet: oficjalna `arduino-libraries/Ethernet`** (była `adafruit/Ethernet2` —
   przestarzała/nieutrzymywana). Kosztuje więcej flash niż Ethernet2 (obsługa W5100/W5200/W5500
-  z auto-detekcją chipu w runtime, niewyłączalna `#define`m), stąd **DHCP wyłączone domyślnie**
-  (sam koszt DHCP+UDP to ~3,8 KB) — strona WWW działa na **static IP** (ustaw `ip`/`gateway`/
-  `subnet` w `src/main.ino` pod docelową sieć). Warianty bez strony WWW (np. `OTRSP`+`OTRSP_TCP`
-  razem, bez `EthModule` — ~82,5% flash) mają zapas i mogą włączyć `__USE_DHCP__` z powrotem.
+  z auto-detekcją chipu w runtime, niewyłączalna `#define`m). **DHCP usunięte z projektu** —
+  kosztowało ~3,8 KB flash, a przydatne było tylko w wariantach bez strony WWW; nie warto było
+  trzymać całej ścieżki kodu dla tego jednego przypadku. Strona WWW działa zawsze na
+  **static IP** (ustaw `ip`/`gateway`/`subnet` w `src/main.ino` pod docelową sieć).
 
 Domyślne nazwy anten są w `antDefault[]`, domyślna nazwa stacji w `siteDefault` (`src/main.ino`).
 Przy włączonym `WWW_EEPROM_NAMES` nazwa stacji i nazwy anten 1–6 są **edytowalne przez WWW** (karta
@@ -92,8 +92,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `OTRSP_TCP`     | WYŁ.      | surowy TCP dla OTRSP — niezależne od `OTRSP`; z `EthModule` mieści się, ale zapas to zaledwie ~6 B |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
-| `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW                        |
-| `__USE_DHCP__`  | WYŁ.      | DHCP dla modułu Ethernet (koszt ~3,8 KB flash z oficjalną biblioteką) |
+| `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW (zawsze static IP, bez DHCP) |
 
 ### Funkcje opcjonalne (SQ9FK)
 
@@ -152,23 +151,23 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ.** Build zweryfikowany:
 > `pio run -e nanoatmega328` → **SUCCESS**, bez ostrzeżeń
-> (Flash **97,0%** / 29794 B, RAM **48,2%** / 988 B — domyślne flagi: DHCP wył., BCD/PTT wył.,
+> (Flash **97,0%** / 29794 B, RAM **48,2%** / 988 B — domyślne flagi: BCD/PTT wył.,
 > nazwy WWW wł., konfiguracja sieciowa edytowalna wł.). Flash **prawie pełny** (~926 B wolne).
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
 > W5100/W5200/W5500 z auto-detekcją chipu w runtime — niewyłączalna `#define`m, zawsze
-> skompilowana). Sama obsługa **DHCP dokłada ~3,8 KB** (`Dhcp.cpp`+`EthernetUdp.cpp`) — z tego
-> powodu **DHCP jest wyłączone domyślnie** dla strony WWW (`//#define __USE_DHCP__`), a urządzenie
-> startuje na **static IP** (ustaw `ip`/`gateway`/`subnet` w `src/main.ino` pod docelową sieć).
-> Sama strona WWW (HTML/CSS/`BufP`) kosztuje dodatkowo ~8 KB — to ona, nie sam Ethernet, zajmuje
-> większość budżetu.
+> skompilowana). **DHCP usunięte z projektu** — kosztowało ~3,8 KB (`Dhcp.cpp`+`EthernetUdp.cpp`),
+> przydatne było tylko w wariantach bez strony WWW; urządzenie zawsze startuje na **static IP**
+> (ustaw `ip`/`gateway`/`subnet` w `src/main.ino` pod docelową sieć, albo edytuj po flashowaniu
+> przez WWW+EEPROM). Sama strona WWW (HTML/CSS/`BufP`) kosztuje dodatkowo ~8 KB — to ona, nie
+> sam Ethernet, zajmuje większość budżetu.
 >
 > `OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) są **niezależne** — każdy może być włączony osobno,
 > i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
 > **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
-> - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define __USE_DHCP__`,
->   `//#define OTRSP`, `//#define OTRSP_TCP` → Flash **97,0%** (29794 B), RAM **48,2%** (988 B)
+> - **Strona WWW, static IP** (obecnie): `#define EthModule`, `//#define OTRSP`,
+>   `//#define OTRSP_TCP` → Flash **97,0%** (29794 B), RAM **48,2%** (988 B)
 > - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash **98,7%** (30310 B), RAM **51,5%** (1054 B) — zapas ~410 B
 > - **Strona WWW + OTRSP po surowym TCP**: `#define EthModule`, `//#define OTRSP`,
@@ -178,9 +177,8 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 >   gwarancję.
 > - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash **37,9%** (11634 B), RAM **37,3%** (763 B)
-> - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW, **z DHCP** — jest zapas):
->   `//#define EthModule`, `#define OTRSP`, `#define OTRSP_TCP`, `#define __USE_DHCP__`
->   → Flash **82,5%** (25330 B), RAM **60,0%** (1228 B)
+> - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
+>   `#define OTRSP`, `#define OTRSP_TCP` → Flash **70,3%** (21606 B), RAM **54,3%** (1112 B)
 >
 > Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieści się**
 > (brakuje ~116 B) — to jedyna blokowana kombinacja, wymuszona `#error` w compile-time.
@@ -216,9 +214,8 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 3. Wybierz port COM, *Upload*.
 
 > Uwaga: instalacja biblioteki `Ethernet` (Library Manager, oficjalna Arduino) jest wymagana
-> dla `EthModule`/`OTRSP_TCP`. Dawniej trzeba było ręcznie patchować `Dhcp.h`, żeby skrócić
-> timeout DHCP (60 s → 6 s) — teraz to parametr `Ethernet.begin(mac, timeout, responseTimeout)`
-> w `src/main.ino`, żaden patch biblioteki nie jest potrzebny.
+> dla `EthModule`/`OTRSP_TCP`. Firmware nie używa DHCP (usunięte z projektu) ani nie wymaga
+> żadnych patchy biblioteki — urządzenie startuje zawsze na static IP.
 
 ## Symulator interfejsu WWW
 
