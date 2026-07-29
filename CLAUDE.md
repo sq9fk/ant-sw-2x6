@@ -178,8 +178,19 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   `#ifdef` nie uległy rozjechaniu. **Pięć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
   — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` ma
   zapas zaledwie ~6 B — buduj go w pierwszej kolejności, najłatwiej go zepsuć.
-- **Wygląd interfejsu WWW** można podejrzeć bez sprzętu: `tools/websim.html` (symulator
-  odtwarzający HTML/CSS firmware) lub `python tools/serve.py`. Przy zmianie HTML strony
-  zaktualizuj też symulator.
+- **Wygląd interfejsu WWW i protokół OTRSP** można podejrzeć bez sprzętu: `tools/websim.html`
+  (odtwarza HTML/CSS firmware + symuluje `OTRSP_parse()` — dwa niezależne monitory USB/TCP,
+  TX/RX kolorowane) lub `python tools/serve.py`. Przy zmianie HTML strony **lub** logiki
+  `OTRSP_parse()` zaktualizuj też symulator (`DEVICE_CSS`/`buildDeviceHTML()` dla WWW,
+  `otrspRespond()` dla OTRSP — to reczny odpowiednik firmware'owego parsera, **nie** wolno
+  pozwolic mu sie rozjechac).
+  **Prawdziwe polaczenia** (wymagaja `python tools/serve.py`, nie `file://`): USB przez
+  Web Serial API (`navigator.serial`, Chrome/Edge) - przeglądarka rozmawia bezposrednio z
+  realnym portem COM; TCP przez most WebSocket<->TCP w `tools/serve.py` (`OtrspBridge`,
+  `WSConnection` - minimalny serwer WS z stdlib, bez zewnetrznych zaleznosci) - prawdziwy
+  N1MM+ moze polaczyc sie z `127.0.0.1:4534` (jak `OTRSP_TCP_PORT`), a most jest "glupa rura"
+  bajtow do przegladarki - cala logika protokolu zostaje w `otrspRespond()` (JS), zeby nie
+  duplikowac jej w Pythonie. Przy zmianie protokolu w `otrspRespond()` most w Pythonie
+  **nie wymaga zmian** (nie zna semantyki OTRSP, tylko przekazuje bajty).
 - Brak realnego sprzętu w tym środowisku — testy funkcjonalne (EEPROM, W5500) wykonuje
   użytkownik na stacji.

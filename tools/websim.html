@@ -34,13 +34,39 @@
              font-size:12px; border:1px solid var(--line); border-radius:8px; padding:10px;
              white-space:pre; overflow:auto; }
   .hint { font-size:12px; color:var(--muted); margin-top:12px; }
+  label.chk { display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; }
+  label.chk input { cursor:pointer; }
+  .otrsp-wrap { display:flex; flex-wrap:wrap; gap:18px; padding:0 18px 18px; align-items:flex-start; }
+  .mon-panel { flex:1 1 380px; min-width:320px; }
+  .mon-panel .sub { font-size:12px; color:var(--muted); margin:-6px 0 10px; }
+  .mon-box { background:#0e1a1f; color:#dbe6e9; border-radius:8px; padding:10px 12px;
+             height:200px; overflow-y:auto; font-family:ui-monospace, Consolas, monospace;
+             font-size:12.5px; white-space:pre-wrap; word-break:break-all; }
+  .mon-box .ln { padding:1px 0; }
+  .mon-box .tx { color:#5db8ff; }
+  .mon-box .rx { color:#4ade80; }
+  .mon-box .sys { color:#8b98a5; font-style:italic; }
+  .mon-box .tx b, .mon-box .rx b { opacity:.7; font-weight:600; margin-right:4px; }
+  .mon-input-row { display:flex; gap:6px; margin-top:8px; }
+  .mon-input-row input[type=text] { flex:1; border:1px solid var(--line); border-radius:6px;
+             padding:6px 8px; font-family:ui-monospace, Consolas, monospace; font-size:13px; }
+  .quick-cmds { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  .quick-cmds button { font-size:11px; padding:3px 8px; }
+  .conn-row { display:flex; align-items:center; gap:8px; margin:-4px 0 10px; flex-wrap:wrap; }
+  .conn-row .btn { font-size:12px; padding:4px 10px; }
+  .conn-status { font-size:12px; color:var(--muted); }
+  .conn-status.live { color:var(--accent); font-weight:600; }
+  fieldset.mon-input-row { border:0; padding:0; margin:8px 0 0; }
+  .mon-input-row:disabled, .mon-input-row[disabled] input, .mon-input-row[disabled] button,
+  .quick-cmds[disabled] button { opacity:.45; pointer-events:none; }
 </style>
 </head>
 <body>
 <header>
   <h1>Symulator interfejsu WWW — SP9PDF RemoteQTH 6×2 Antenna Switch</h1>
   <p>Odtwarza stronę generowaną przez firmware w <b>domyślnej konfiguracji</b> (Ethernet WŁ.,
-     BCD/PTT WYŁ., edycja nazw anten WŁ.) — do testowania wyglądu bez sprzętu.</p>
+     BCD/PTT WYŁ., edycja nazw anten WŁ.) oraz protokół <b>OTRSP</b> (USB/TCP) — do testowania
+     wyglądu i sterowania SO2R bez sprzętu.</p>
 </header>
 
 <div class="wrap">
@@ -64,6 +90,21 @@
       podglądzie po prawej — działają jak na urządzeniu. Nazwy mają limit 11 znaków (jak w
       firmware). Kolizję zobaczysz wybierając tę samą antenę na obu TRX. Przyciski Flex
       (GPA7/GPB7) są niezależne od wyboru anteny. Symulator pomija auto-odświeżanie i popup „split".</p>
+
+    <h2 style="margin-top:16px">OTRSP (SO2R)</h2>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="chkOtrspUSB"> OTRSP po USB (<code>#define OTRSP</code>)</label>
+    </div>
+    <div class="row">
+      <label class="chk"><input type="checkbox" id="chkOtrspTCP"> OTRSP po TCP, port 4534 (<code>#define OTRSP_TCP</code>)</label>
+    </div>
+    <p class="hint">Symuluje parser <code>OTRSP_parse()</code> z firmware — komendy <code>AUX1n</code>/
+      <code>AUX2n</code> ustawiają antenę TRX1/TRX2 (widać to od razu na podglądzie WWW po prawej),
+      zapytania <code>?AUX1</code>/<code>?AUX2</code>/<code>?NAME</code>/<code>?</code> zwracają
+      odpowiedź. Oba kanały można włączyć naraz w symulatorze do testów, ale
+      <b>prawdziwy firmware nie mieści w flash</b> strony WWW razem z obydwoma kanałami OTRSP
+      naraz (patrz <a href="../docs/DESIGN.md" target="_blank">docs/DESIGN.md</a> §9) — każdy
+      z osobna owszem.</p>
   </section>
 
   <section class="panel preview">
@@ -75,6 +116,8 @@
     </details>
   </section>
 </div>
+
+<div class="otrsp-wrap" id="otrspWrap"></div>
 
 <script>
 const ANT_DEFAULT = ["OFF","ANT1","ANT2","ANT3","ANT4",
@@ -305,6 +348,258 @@ document.getElementById('reset').onclick=()=>{
   state.volt="13.8"; state.ports=2;
   document.getElementById('volt').value="13.8"; buildControls(); render();
 };
+
+// ===== OTRSP (SO2R) - symulacja OTRSP_parse() z firmware (src/main.ino) =====
+// Terminator komend to CR wg specyfikacji OTRSP. QCOMPARE/COMPARE w firmware to dopasowanie
+// PREFIKSU (memcmp na stalej dlugosci, ignoruje reszte) - .startsWith() odzwierciedla to samo.
+function otrspAuxOut(idx){
+  const p = state.port[idx];
+  if (!p) return 0;
+  return p.err ? 0 : p.sel;        // kolizja -> wyjscie OFF (0), jak w loop() firmware (port[i+4][1])
+}
+function otrspRespond(cmd){
+  if (cmd.charAt(0) === '?') {
+    if (cmd.length === 1) return '?';               // ping - sam "?"
+    const q = cmd.substring(1);
+    if (q.startsWith('AUX1')) return 'AUX1' + otrspAuxOut(0);
+    if (q.startsWith('AUX2')) return 'AUX2' + otrspAuxOut(1);
+    if (q.startsWith('NAME')) return 'NAME2x6SQ9FKRemoteAntennaSwitch';   // stala nazwa urzadzenia
+    return cmd;                                      // nieznane zapytanie - echo verbatim
+  }
+  if (cmd.startsWith('AUX1') || cmd.startsWith('AUX2')) {   // SET: AUX1n / AUX2n -> antena TRX1/TRX2
+    const idx = cmd.charAt(3) === '2' ? 1 : 0;
+    let val = parseInt(cmd.substring(4), 10);
+    if (isNaN(val)) val = 0;
+    val = val & 15;
+    if (idx < state.ports) { state.port[idx].sel = val; render(); }
+    return null;                                      // firmware nic nie odsyla po SET
+  }
+  return null;                                         // nieznana komenda - ignorowana
+}
+
+const otrspChan = {};   // { usb:{box,input,sec,real,send}, tcp:{...} }
+function otrspLine(ch, cls, prefix, text){
+  const box = otrspChan[ch].box;
+  const div = document.createElement('div');
+  div.className = 'ln ' + cls;
+  if (prefix){ const b=document.createElement('b'); b.textContent=prefix; div.appendChild(b); }
+  div.appendChild(document.createTextNode(text));
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+// Wysylka: w trybie symulacji liczy odpowiedz lokalnie (otrspRespond); w trybie "real"
+// (prawdziwe urzadzenie USB / most TCP) pisze na prawdziwy transport - odpowiedz przyjdzie
+// asynchronicznie przez read-loop (USB) albo WebSocket (TCP) i sama dopisze sie jako RX.
+function otrspSend(ch){
+  const c = otrspChan[ch];
+  const raw = c.input.value;
+  if (!raw) return;
+  c.input.value = '';
+  otrspLine(ch, 'tx', '→ ', raw);
+  if (c.real && c.send){
+    c.send(raw);
+  } else {
+    const resp = otrspRespond(raw);
+    if (resp !== null) otrspLine(ch, 'rx', '← ', resp);
+  }
+}
+function setConnUI(ch, live, statusText){
+  const c = otrspChan[ch];
+  c.statusEl.textContent = statusText;
+  c.statusEl.classList.toggle('live', live);
+  c.connectBtn.style.display = live ? 'none' : '';
+  c.disconnectBtn.style.display = live ? '' : 'none';
+}
+// Kanal TCP w trybie "real" jest sterowany przez prawdziwe N1MM+ (my gramy role urzadzenia) -
+// recznie wpisywanie komend nie ma tam sensu, wiec blokujemy input. Kanal USB w trybie "real"
+// to my w roli komputera mowiacego do prawdziwego sprzetu - input zostaje aktywny.
+function setInputEnabled(ch, enabled){
+  const c = otrspChan[ch];
+  c.input.disabled = !enabled;
+  c.sec.querySelector('.mon-input-row .btn').disabled = !enabled;
+  c.sec.querySelectorAll('.quick-cmds button[data-c]').forEach(b => b.disabled = !enabled);
+}
+function buildOtrspMonitor(ch, title, sub, connectLabel){
+  const wrap = document.getElementById('otrspWrap');
+  const sec = document.createElement('section');
+  sec.className = 'panel mon-panel';
+  sec.id = 'mon-' + ch;
+  sec.innerHTML =
+    '<h2>' + title + '</h2>' +
+    '<p class="sub">' + sub + '</p>' +
+    '<div class="conn-row">' +
+      '<button class="btn" data-conn>' + connectLabel + '</button>' +
+      '<button class="btn" data-disconn style="display:none">Rozłącz</button>' +
+      '<span class="conn-status">symulacja (lokalna)</span>' +
+    '</div>' +
+    '<div class="mon-box"></div>' +
+    '<div class="mon-input-row">' +
+      '<input type="text" placeholder="np. ?AUX1 lub AUX103" spellcheck="false">' +
+      '<button class="btn">Wyślij</button>' +
+    '</div>' +
+    '<div class="quick-cmds">' +
+      '<button data-c="?">?</button>' +
+      '<button data-c="?AUX1">?AUX1</button>' +
+      '<button data-c="?AUX2">?AUX2</button>' +
+      '<button data-c="?NAME">?NAME</button>' +
+      '<button data-c="AUX101">AUX101 (TRX1→ANT1)</button>' +
+      '<button data-c="AUX206">AUX206 (TRX2→ANT6)</button>' +
+      '<button class="btn" data-clear="1" style="margin-left:auto">Wyczyść</button>' +
+    '</div>';
+  wrap.appendChild(sec);
+  const box = sec.querySelector('.mon-box');
+  const input = sec.querySelector('input[type=text]');
+  otrspChan[ch] = {
+    box, input, sec, real: false, send: null,
+    statusEl: sec.querySelector('.conn-status'),
+    connectBtn: sec.querySelector('[data-conn]'),
+    disconnectBtn: sec.querySelector('[data-disconn]'),
+  };
+  sec.querySelector('.mon-input-row .btn').onclick = () => otrspSend(ch);
+  input.addEventListener('keydown', ev => { if (ev.key === 'Enter') otrspSend(ch); });
+  sec.querySelectorAll('.quick-cmds button').forEach(b=>{
+    if (b.dataset.clear){ b.onclick = () => { box.innerHTML = ''; }; return; }
+    b.onclick = () => { input.value = b.dataset.c; otrspSend(ch); };
+  });
+  otrspLine(ch, 'sys', '', title.replace(/^Monitor OTRSP — /,'') + ' — gotowy (terminator CR, jak w specyfikacji OTRSP)');
+}
+
+// ===== USB: Web Serial API - prawdziwe polaczenie z fizycznym urzadzeniem =====
+// Wymaga Chrome/Edge oraz strony serwowanej przez http://localhost (python tools/serve.py) -
+// NIE dziala z pliku otwartego bezposrednio (file://), taki jest wymog przegladarki.
+let usbPort = null, usbReader = null, usbWriter = null, usbRxBuf = '';
+async function usbConnect(){
+  if (!('serial' in navigator)) {
+    otrspLine('usb', 'sys', '', 'Web Serial API niedostępne (potrzebny Chrome/Edge, strona przez '
+      + 'http://localhost - uruchom "python tools/serve.py", nie otwieraj pliku bezpośrednio).');
+    return;
+  }
+  try {
+    usbPort = await navigator.serial.requestPort();
+    await usbPort.open({ baudRate: 9600 });   // SERBAUD w firmware, 8N1 domyslnie
+  } catch (e) {
+    otrspLine('usb', 'sys', '', 'Nie połączono: ' + e.message);
+    usbPort = null;
+    return;
+  }
+  usbWriter = usbPort.writable.getWriter();
+  const c = otrspChan.usb;
+  c.real = true;
+  c.send = async (text) => {
+    try { await usbWriter.write(new TextEncoder().encode(text + '\r')); }
+    catch (e) { otrspLine('usb', 'sys', '', 'Błąd wysyłania: ' + e.message); }
+  };
+  setConnUI('usb', true, 'połączono (9600 8N1)');
+  otrspLine('usb', 'sys', '', 'Połączono z prawdziwym urządzeniem przez USB.');
+  usbReadLoop();
+}
+async function usbReadLoop(){
+  const reader = usbPort.readable.getReader();
+  usbReader = reader;
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      usbRxBuf += decoder.decode(value, { stream: true });
+      let idx;
+      while ((idx = usbRxBuf.indexOf('\r')) >= 0) {
+        const line = usbRxBuf.slice(0, idx);
+        usbRxBuf = usbRxBuf.slice(idx + 1).replace(/^\n/, '');   // pomin ewentualny LF po CR
+        if (line) otrspLine('usb', 'rx', '← ', line);
+      }
+    }
+  } catch (e) {
+    otrspLine('usb', 'sys', '', 'Połączenie USB przerwane: ' + e.message);
+  } finally {
+    try { reader.releaseLock(); } catch (e) {}
+  }
+  usbDisconnect();
+}
+async function usbDisconnect(){
+  const c = otrspChan.usb;
+  c.real = false; c.send = null;
+  try { if (usbReader) await usbReader.cancel(); } catch (e) {}
+  try { if (usbWriter) usbWriter.releaseLock(); } catch (e) {}
+  try { if (usbPort) await usbPort.close(); } catch (e) {}
+  usbPort = null; usbReader = null; usbWriter = null; usbRxBuf = '';
+  setConnUI('usb', false, 'symulacja (lokalna)');
+}
+
+// ===== TCP: most WebSocket<->TCP (serve.py) - prawdziwe N1MM+ laczy sie z portem 4534 =====
+// Tu MY gramy role urzadzenia (odwrotnie niz USB): komendy przychodza OD N1MM+ (RX), a
+// odpowiedz liczy ten sam otrspRespond() co w trybie symulacji i wysyla ja z powrotem (TX).
+// Recznego wpisywania komend nie ma sensu w tym trybie - patrz setInputEnabled().
+let tcpWs = null, tcpRxBuf = '';
+function tcpConnect(){
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  if (location.protocol === 'file:') {
+    otrspLine('tcp', 'sys', '', 'Most TCP wymaga serwera - uruchom "python tools/serve.py" '
+      + '(nie otwieraj pliku bezpośrednio) i odśwież stronę pod http://localhost.');
+    return;
+  }
+  try { tcpWs = new WebSocket(proto + location.host + '/otrsp-ws'); }
+  catch (e) { otrspLine('tcp', 'sys', '', 'Nie można otworzyć WebSocket: ' + e.message); return; }
+  const c = otrspChan.tcp;
+  tcpWs.onopen = () => {
+    c.real = true;
+    tcpRxBuf = '';
+    setConnUI('tcp', true, 'most aktywny - N1MM+ łączy się na 127.0.0.1:4534');
+    setInputEnabled('tcp', false);
+    otrspLine('tcp', 'sys', '', 'Most TCP↔WebSocket połączony. Podłącz N1MM+ (OTRSP przez TCP) do 127.0.0.1:4534.');
+  };
+  tcpWs.onmessage = ev => {
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (msg.type === 'connected') { otrspLine('tcp', 'sys', '', 'Klient TCP połączony: ' + msg.peer); tcpRxBuf=''; }
+    else if (msg.type === 'disconnected') { otrspLine('tcp', 'sys', '', 'Klient TCP rozłączony.'); }
+    else if (msg.type === 'data') {
+      tcpRxBuf += msg.data;
+      let idx;
+      while ((idx = tcpRxBuf.indexOf('\r')) >= 0) {
+        const line = tcpRxBuf.slice(0, idx);
+        tcpRxBuf = tcpRxBuf.slice(idx + 1).replace(/^\n/, '');
+        if (!line) continue;
+        otrspLine('tcp', 'rx', '← ', line);              // komenda OD N1MM+
+        const resp = otrspRespond(line);                 // ta sama logika co symulacja
+        if (resp !== null) {
+          otrspLine('tcp', 'tx', '→ ', resp);
+          tcpWs.send(JSON.stringify({ type: 'data', data: resp + '\r' }));
+        }
+      }
+    }
+  };
+  tcpWs.onclose = () => {
+    c.real = false;
+    setConnUI('tcp', false, 'symulacja (lokalna)');
+    setInputEnabled('tcp', true);
+    tcpWs = null;
+  };
+  tcpWs.onerror = () => {
+    otrspLine('tcp', 'sys', '', 'Błąd WebSocket - upewnij się, że działa "python tools/serve.py".');
+  };
+}
+function tcpDisconnect(){
+  if (tcpWs) tcpWs.close();
+}
+
+buildOtrspMonitor('usb', 'Monitor OTRSP — USB (Serial, 9600 8N1)',
+  'Symuluje serialEvent()/in_buf z firmware — jedna komenda na linię, terminator CR. '
+  + 'Można też połączyć z prawdziwym urządzeniem przez USB (Web Serial).', 'Połącz z prawdziwym urządzeniem (USB)');
+buildOtrspMonitor('tcp', 'Monitor OTRSP — TCP (port 4534)',
+  'Symuluje trwałe połączenie EthernetClient (nie request/response jak WWW) — jeden aktywny klient naraz. '
+  + 'Można też uruchomić most, żeby połączyło się prawdziwe N1MM+.', 'Uruchom most dla N1MM+ (wymaga serve.py)');
+document.getElementById('mon-usb').style.display = 'none';
+document.getElementById('mon-tcp').style.display = 'none';
+document.getElementById('chkOtrspUSB').onchange = e => {
+  document.getElementById('mon-usb').style.display = e.target.checked ? '' : 'none';
+};
+document.getElementById('chkOtrspTCP').onchange = e => {
+  document.getElementById('mon-tcp').style.display = e.target.checked ? '' : 'none';
+};
+otrspChan.usb.connectBtn.onclick = usbConnect;
+otrspChan.usb.disconnectBtn.onclick = usbDisconnect;
+otrspChan.tcp.connectBtn.onclick = tcpConnect;
+otrspChan.tcp.disconnectBtn.onclick = tcpDisconnect;
 
 buildControls();
 render();

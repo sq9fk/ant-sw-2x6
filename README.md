@@ -220,13 +220,34 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 ## Symulator interfejsu WWW
 
 Podgląd wyglądu strony urządzenia bez sprzętu — odtwarza HTML/CSS generowany przez firmware.
+Symuluje też **protokół OTRSP** (`OTRSP_parse()` z `src/main.ino`) — dwie niezależne, włączane
+osobno checkboxami sekcje "OTRSP po USB" / "OTRSP po TCP", każda z monitorem terminala
+(wysłane na niebiesko, odebrane na zielono — niezależnie od tego, kto w danym trybie jest
+"komputerem", a kto "urządzeniem", patrz niżej) i przyciskami szybkich komend
+(`?`, `?AUX1`, `?AUX2`, `?NAME`, `AUX101`, `AUX206`). Komendy `AUX1n`/`AUX2n` faktycznie
+przełączają antenę na podglądzie WWW — obie symulacje (WWW i OTRSP) dzielą ten sam stan.
 
 ```bash
 python tools/serve.py
 ```
 
 Skrypt wystawia stronę lokalnie (domyślnie `http://127.0.0.1:8765/websim.html`) i otwiera ją
-w przeglądarce. Można też otworzyć plik [`tools/websim.html`](tools/websim.html) bez serwera.
+w przeglądarce. Można też otworzyć plik [`tools/websim.html`](tools/websim.html) bez serwera —
+ale wtedy **nie działają** poniższe dwie funkcje realnego połączenia (wymagają `http://`).
+
+**Prawdziwe połączenia OTRSP** (nie tylko symulacja w JS):
+- **USB** — przycisk „Połącz z prawdziwym urządzeniem" w monitorze USB używa
+  [Web Serial API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API)
+  (Chrome/Edge) — przeglądarka prosi o wybór **realnego portu COM** i rozmawia bezpośrednio
+  z podłączonym przełącznikiem antenowym (9600 8N1, jak `SERBAUD`). Wysyłane komendy i
+  odpowiedzi realnego urządzenia widać w tym samym monitorze co w trybie symulacji.
+- **TCP** — przycisk „Uruchom most dla N1MM+" otwiera WebSocket do `python tools/serve.py`,
+  który jednocześnie nasłuchuje na **prawdziwym porcie TCP 4534** (jak `OTRSP_TCP_PORT`).
+  Prawdziwy N1MM+ (albo inny program OTRSP) może się połączyć z `127.0.0.1:4534` dokładnie
+  jak z prawdziwym urządzeniem w wariancie `OTRSP_TCP` — komendy trafiają do przeglądarki przez
+  most (surowa "rura" bajtów w Pythonie, `tools/serve.py`), a `OTRSP_parse()` w JS liczy
+  odpowiedź i odsyła ją z powrotem tym samym mostem. W tym trybie to **symulator gra rolę
+  urządzenia** (odwrotnie niż USB, gdzie to my jesteśmy "komputerem" mówiącym do sprzętu).
 
 ## Licencja
 
