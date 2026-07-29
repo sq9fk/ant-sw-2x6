@@ -16,19 +16,25 @@ Wykrywanie kolizji między TRX działa zawsze.
 - MCU: **Arduino Nano (ATmega328P)**, framework Arduino.
 - Build: **PlatformIO** — `pio run` (env `nanoatmega328` = stary bootloader,
   `nanoatmega328new` = nowy). Wgranie: `pio run -t upload`. Monitor: 9600 8N1.
-  `LiquidCrystal` i `Ethernet2` (`adafruit/Ethernet2`, W5500) są w `lib_deps` (NIE w rdzeniu
+  `LiquidCrystal` i `Ethernet` (`arduino-libraries/Ethernet`, oficjalna — **NIE** `adafruit/
+  Ethernet2`, przestarzała/nieutrzymywana, zastąpiona 2026-07-29) są w `lib_deps` (NIE w rdzeniu
   PIO); `Wire`/`SPI` z rdzenia.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** `EthModule` (strona WWW) i `OTRSP` trzymać
   osobno (wykluczają się rozmiarowo — `#error` w kodzie pilnuje tego w compile-time). Domyślnie:
-  **Ethernet WŁ. (strona WWW), OTRSP WYŁ., BCD/PTT WYŁ., WEB_ANT_NAMES WŁ.** — Flash **99,7%** /
-  RAM **45,6%**. Flash **prawie pełny** (~94 B wolne). Build z **BCD+PTT+Ethernet już się NIE
-  mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup).
-  **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y) — nie sam Ethernet+DHCP.
-  Zmierzone: Ethernet+DHCP bez strony WWW = ~72,5% (22270 B); + OTRSP (serial) = ~74,1%.
-  **Trzy warianty** (`#error` wymusza wykluczenie): (1) `EthModule` — strona WWW; (2) `OTRSP` —
-  OTRSP tylko po USB, bez Ethernetu, ~38% flash; (3) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i**
-  surowym TCP (`OTRSP_TCP_PORT`, domyślnie 4534) jednocześnie, Ethernet+DHCP bez strony WWW,
-  ~76% flash, ~7,5 KB zapasu. `OTRSP_parse(char*, Print&)` jest wspólny dla obu kanałów (Serial
+  **Ethernet WŁ. (strona WWW, static IP), OTRSP WYŁ., DHCP WYŁ., BCD/PTT WYŁ., WEB_ANT_NAMES
+  WŁ.** — Flash **93,8%** / RAM **47,7%**. Flash **prawie pełny** (~1,9 KB wolne). Build z
+  **BCD+PTT+Ethernet już się NIE mieści**. Przy dokładaniu do WWW pilnuj budżetu (odchudź CSS/markup).
+  **Oficjalna biblioteka Ethernet jest większa niż Ethernet2** (auto-detekcja W5100/W5200/W5500
+  w runtime, niewyłączalna `#define`m — zawsze skompilowana). **DHCP dokłada ~3,8 KB**
+  (`Dhcp.cpp`+`EthernetUdp.cpp`), dlatego **wyłączone domyślnie** dla strony WWW (`//#define
+  __USE_DHCP__`) — static IP (`ip`/`gateway`/`subnet` w kodzie). Sama strona WWW (HTML/CSS/
+  `BufP`/print-y) kosztuje dodatkowo ~8 KB — nie sam Ethernet. Zmierzone: Ethernet bez DHCP i bez
+  strony WWW = ~72,5% (22270 B); + OTRSP (serial) = ~74,1%; + `OTRSP_TCP` z DHCP wł. = **82,8%**
+  (ma zapas, DHCP tu można zostawić włączone).
+  **Trzy warianty** (`#error` wymusza wykluczenie): (1) `EthModule` — strona WWW (static IP);
+  (2) `OTRSP` — OTRSP tylko po USB, bez Ethernetu, ~38% flash; (3) `OTRSP`+`OTRSP_TCP` — OTRSP po
+  USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyślnie 4534) jednocześnie, bez strony WWW, **82,8%**
+  flash z DHCP włączonym. `OTRSP_parse(char*, Print&)` jest wspólny dla obu kanałów (Serial
   i EthernetClient dziedziczą po `Print`) — nie duplikuj logiki komend przy zmianach.
 - **Optymalizacja rozmiaru — konwencje do zachowania:** `glyphs[6][8]` w `PROGMEM` (glify
   przez `memcpy_P`); `BCDmatrixOUT` w `PROGMEM` (`pgm_read_byte`, tylko przy `BCD_INPUT`);
@@ -36,8 +42,9 @@ Wykrywanie kolizji między TRX działa zawsze.
   poz. 0–7) są w pętli — przy zmianie HTML pilnuj nazw pól `S{bank}{kod}`, bo od nich zależy
   parsowanie żądania.
 - **Serwer WWW (konwencje):** **całe wyjście idzie przez bufor `BufP out(client)`** (`out.print`/
-  `out.println`, na końcu `out.done()`) — w Ethernet2 każde `write()` to osobny segment TCP z busy-waitem
-  na `SEND_OK`, a `print(F())` leci znak-po-znaku; `BufP` zbiera w RAM i wysyła porcjami 128 B. **Nie
+  `out.println`, na końcu `out.done()`) — w bibliotekach Wiznet (sprawdzone w Ethernet2 i oficjalnej
+  `arduino-libraries/Ethernet`) każde `write()` to osobny segment TCP z busy-waitem na `SEND_OK`,
+  a `print(F())` leci znak-po-znaku; `BufP` zbiera w RAM i wysyła porcjami 128 B. **Nie
   wracaj do `client.print()` ani per-`send()`.** Statyczny nagłówek+CSS+ikona są w PROGMEM
   (`HTTP_HEAD`/`HTTP_HEAD2`/`POWER_SVG`) i też lecą przez `out.print((const __FlashStringHelper*)…)`.
   **Układ strony** (ciemny teal,
@@ -138,9 +145,10 @@ wszystkimi miejscami dotyczącymi danej zmiany:
 
 ## Weryfikacja
 
-- Kompilacja: `pio run` (bez ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki `Ethernet2`
+- Kompilacja: `pio run` (bez ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki `Ethernet`
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
-  `#ifdef` nie uległy rozjechaniu.
+  `#ifdef` nie uległy rozjechaniu. **Trzy warianty do zbudowania** przy zmianach w Ethernet/OTRSP
+  — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11.
 - **Wygląd interfejsu WWW** można podejrzeć bez sprzętu: `tools/websim.html` (symulator
   odtwarzający HTML/CSS firmware) lub `python tools/serve.py`. Przy zmianie HTML strony
   zaktualizuj też symulator.

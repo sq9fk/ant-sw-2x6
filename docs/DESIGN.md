@@ -24,7 +24,7 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `Ports` | 2 | liczba TRX / linii LCD (2–4) |
 | `Inputs` | 6 | liczba anten (etykieta „6x2") |
 | `EthModule` | **wł.** | Ethernet W5500 + serwer WWW |
-| `__USE_DHCP__` | wł. | DHCP dla Ethernetu |
+| `__USE_DHCP__` | **wył.** | DHCP dla Ethernetu (koszt ~3,8 KB flash z oficjalną biblioteką — domyślnie static IP) |
 | `WEB_ANT_NAMES` | **wł.** | edycja nazw anten przez WWW + zapis EEPROM |
 | `ANT_MAXLEN` | 11 | limit długości nazwy anteny (szerokość LCD) |
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
@@ -85,10 +85,12 @@ Kolejność w każdej iteracji:
    LOW/HIGH są **nieblokujące** (znacznik `voltWarn`, ~2 s bez `delay()`) — awaria napięcia nie
    zamraża WWW/przełączania/enkodera.
 
-**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. Przy
-`__USE_DHCP__` DHCP jest **ponawiany** (`while Ethernet.begin(mac)==0`, każda próba do 60 s), a po
-3 nieudanych próbach **fallback na static IP** (`ip/gateway/subnet`) — urządzenie zawsze dostaje
-adres i jest osiągalne. IP pokazywane na LCD (5 s).
+**Start (`setup()`).** Splash LCD (2 s) + napięcie (3 s) dają czas na rozruch W5500. **Domyślnie
+`__USE_DHCP__` wyłączone** — static IP (`ip/gateway/subnet`), koszt DHCP z oficjalną biblioteką
+(~3,8 KB) nie mieści się razem ze stroną WWW (patrz §9). Gdy `__USE_DHCP__` włączone: DHCP jest
+**ponawiany** (`while Ethernet.begin(mac, 6000, 4000)==0`, timeout **6 s/próbę jako parametr**
+— oficjalna biblioteka eksponuje go wprost, bez patchowania `Dhcp.h` jak dawniej), a po 3
+nieudanych próbach **fallback na static IP**. IP pokazywane na LCD (5 s).
 
 ## 5. Wyjścia anten — `tx()`
 
@@ -137,7 +139,8 @@ nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
 
 ## 7. Serwer WWW (przy `EthModule`)
 
-Jednowątkowy serwer HTTP na porcie 80 (biblioteka `adafruit/Ethernet2`, W5500).
+Jednowątkowy serwer HTTP na porcie 80 (biblioteka `arduino-libraries/Ethernet`, oficjalna Arduino,
+W5500 — auto-detekcja chipu; do 2026-07-29 była `adafruit/Ethernet2`, przestarzała/nieutrzymywana).
 
 **Odczyt żądania.** Czytana jest **tylko pierwsza linia** (`GET …`) do bufora `reqBuf`
 (bez `String`), z twardym limitem długości. Po znaku `\n` serwer od razu generuje odpowiedź
@@ -193,14 +196,24 @@ Podgląd wyglądu bez sprzętu: [`tools/websim.html`](../tools/websim.html) / `p
 
 ## 9. Budżet pamięci i optymalizacje
 
-Domyślny build (strona WWW): **Flash 99,7 %** (30626 B) / **RAM 45,6 %** (934 B). Flash prawie
-pełny (~94 B). Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści**.
+**Biblioteka Ethernet (2026-07-29):** migracja z `adafruit/Ethernet2` (przestarzała, nieutrzymywana)
+na oficjalną `arduino-libraries/Ethernet`. Oficjalna biblioteka jest **większa** — obsługuje
+W5100/W5200/W5500 z auto-detekcją chipu w runtime (kod dla wszystkich trzech zawsze skompilowany,
+brak `#define`a ograniczającego do samego W5500, w przeciwieństwie do Ethernet2 pisanej wyłącznie
+pod W5500). Efekt: **domyślny build (strona WWW) z DHCP przestał się mieścić** — stąd DHCP
+wyłączone domyślnie (patrz niżej).
+
+Domyślny build (strona WWW, **static IP**, DHCP wył.): **Flash 93,8 %** (28810 B) / **RAM 47,7 %**
+(976 B). Flash prawie pełny (~1,9 KB). Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie
+mieści** niezależnie od DHCP.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
-sam Ethernet+DHCP. Zmierzone (usunięcie ciała `if (client) {...}` strony WWW, zastąpione zaślepką
-accept+close): Ethernet+DHCP **bez** strony WWW = **72,5 %** (22270 B); + `OTRSP` po USB = **74,1 %**
-(22772 B); + `OTRSP_TCP` (USB+TCP równolegle) = **75,7 %** (23244 B) — **~7,5 KB zapasu**. To dlatego
-wariant `OTRSP`+`OTRSP_TCP` (bez strony WWW, patrz §2/§6) ma tyle miejsca mimo Ethernetu/DHCP.
+sam Ethernet. **DHCP kosztuje dodatkowo ~3,8 KB** (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne
+osobno od reszty biblioteki). Zmierzone (usunięcie ciała `if (client) {...}` strony WWW, zastąpione
+zaślepką accept+close): Ethernet bez DHCP i bez strony WWW = **72,5 %** (22270 B); + `OTRSP` po
+USB = **74,1 %** (22772 B); + `OTRSP_TCP` (USB+TCP równolegle) **z DHCP włączonym** = **82,8 %**
+(25422 B) — tu jest zapas (~5,3 KB), więc ten wariant DHCP zostawia włączone. Strona WWW +
+DHCP razem = **106,3 %** (32650 B) — **nie mieści się**, stąd domyślnie static IP dla `EthModule`.
 
 Zastosowane techniki (patrz komentarze `//SQ9FK`):
 - tablice stałe w **PROGMEM** (`antDefault`, `glyphs`, `BCDmatrixOUT`), `port[8][6]` jako `byte`;
@@ -231,11 +244,13 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 ## 11. Weryfikacja
 
 - Kompilacja: `pio run -e nanoatmega328` (0 ostrzeżeń z naszego kodu; ostrzeżenia z biblioteki
-  `Ethernet2` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` — razem ze
+  `Ethernet` są nieszkodliwe). Warto też zbudować z `-DBCD_INPUT -DPTT_BLOCKING` — razem ze
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
 - **Trzy warianty do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) domyślny (`EthModule`,
-  strona WWW); (2) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu); (3) `#define OTRSP`
-  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle). Kombinacja `EthModule` +
-  `OTRSP_TCP` **musi** dać `#error` w compile-time (celowe zabezpieczenie, nie regresja).
+  strona WWW, `__USE_DHCP__` **wył.** — static IP); (2) `#define OTRSP` + `//#define EthModule`
+  (USB, bez Ethernetu); (3) `#define OTRSP` + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP
+  równolegle, `__USE_DHCP__` można zostawić **wł.** — ma zapas). Kombinacja `EthModule` +
+  `OTRSP_TCP` **musi** dać `#error` w compile-time (celowe zabezpieczenie, nie regresja). Kombinacja
+  `EthModule` + `__USE_DHCP__` **musi się nie mieścić** (106,3% — celowe, nie regresja).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
   stacji (brak sprzętu w CI).

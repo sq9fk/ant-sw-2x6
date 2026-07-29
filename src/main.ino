@@ -64,10 +64,10 @@
   Changelog:
   2016-12 change to rev 0.3 pinout
 
-Dhcp.h change from
-  int beginWithDHCP(uint8_t *, unsigned long timeout = 60000, unsigned long responseTimeout = 5000);  
-to
-  int beginWithDHCP(uint8_t *, unsigned long timeout = 6000, unsigned long responseTimeout = 5000);  
+  SQ9FK: dawniej patchowano Dhcp.h biblioteki, zeby skrocic domyslny timeout DHCP (60s->6s).
+  Od migracji na oficjalna biblioteke arduino-libraries/Ethernet (2026-07-29, byla adafruit/
+  Ethernet2 - przestarzala) timeout jest parametrem Ethernet.begin(mac, timeout, responseTimeout)
+  - patch biblioteki juz niepotrzebny, patrz wywolanie w setup().
 
 
   
@@ -186,7 +186,12 @@ const char siteDefault[] PROGMEM = "SP9PDF";
 //#define OTRSP_DEBUG
 #define SERBAUD    9600    // [baud] Serial port baudrate
 #define EthModule        // enable Ethernet module
-#define __USE_DHCP__       // Uncoment to Enable DHCP
+// SQ9FK: DHCP WYLACZONE domyslnie (static IP - patrz ip/gateway/subnet nizej, ustaw pod siec
+// docelowa). Powod: obsluga DHCP w oficjalnej bibliotece Arduino Ethernet kosztuje ~3,8 KB flash
+// (Dhcp.cpp+EthernetUdp.cpp) - ze strona WWW (EthModule) budzet ATmega328 tego nie miesci razem
+// z DHCP. Warianty z zapasem (np. OTRSP+OTRSP_TCP, bez strony WWW) MOGA odkomentowac ta linie -
+// tam DHCP sie miesci (patrz docs/DESIGN.md).
+//#define __USE_DHCP__       // Uncomment to Enable DHCP
 //====================================================================
 #if defined(OTRSP_TCP) && !defined(OTRSP)
   #error "OTRSP_TCP wymaga zdefiniowania OTRSP (surowy TCP to dodatkowy kanal do tego samego parsera)"
@@ -197,17 +202,20 @@ const char siteDefault[] PROGMEM = "SP9PDF";
 // SQ9FK: sprzet sieciowy (W5500/DHCP) potrzebny zarowno dla strony WWW (EthModule) jak i dla
 // surowego TCP OTRSP (OTRSP_TCP) - bring-up jest wspolny, tylko serwer/tresc na porcie sa inne.
 #if defined(EthModule) || defined(OTRSP_TCP)
-  #include <util.h>
-  #include <Ethernet2.h>
-  #include <Dhcp.h>
-  #include <EthernetServer.h>
+  // SQ9FK: oficjalna biblioteka Arduino (arduino-libraries/Ethernet) - Ethernet2/Ethernet3 sa
+  // przestarzale/nieutrzymywane. Jeden naglowek <Ethernet.h> (EthernetClient/Server/Dhcp w srodku,
+  // bez osobnych util.h/Dhcp.h/EthernetServer.h jak w Ethernet2). Auto-detekcja chipu W5100/
+  // W5200/W5500, domyslny pin CS=10 dla AVR (zgodny z PCB: D10-D13 SPI -> W5500).
+  #include <Ethernet.h>
   #include <SPI.h>
 #endif
 #include "Wire.h"
 #include <LiquidCrystal.h>
 LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
 #if defined(EthModule) || defined(OTRSP_TCP)
-  // SQ9FK: mac/ip/DHCP-fallback wspolne dla strony WWW (EthModule) i surowego TCP (OTRSP_TCP)
+  // SQ9FK: mac/ip/gateway/subnet wspolne dla strony WWW (EthModule) i surowego TCP (OTRSP_TCP).
+  // Domyslnie static IP (bez __USE_DHCP__) - dostosuj ip/gateway/subnet pod siec docelowa.
+  // Przy __USE_DHCP__ te wartosci sluza jako fallback po nieudanych probach DHCP (patrz setup()).
   byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
   IPAddress ip(192, 168, 5, 45);         // IP
   IPAddress gateway(192, 168, 5, 254);    // GATE
@@ -440,10 +448,11 @@ void setup()
 #if defined(EthModule) || defined(OTRSP_TCP)
 // SQ9FK: bring-up sprzetu sieciowego (DHCP+fallback) wspolny dla strony WWW i surowego TCP OTRSP.
 #if defined __USE_DHCP__
-  // DHCP z ponawianiem (router bywa wolny przy starcie). Kazda proba begin(mac) czeka
-  // do 60 s (domyslny timeout Dhcp.h); po 3 nieudanych probach -> fallback na static IP.
+  // DHCP z ponawianiem (router bywa wolny przy starcie). SQ9FK: oficjalna biblioteka Ethernet
+  // przyjmuje timeout jako parametr begin() - 6 s/proba (bylo 60 s domyslne w Ethernet2, wymagalo
+  // patchowania Dhcp.h). 3 proby x 6 s = do ~18 s zamiast do 180 s, potem fallback na static IP.
   byte dhcpTry = 0;
-  while (Ethernet.begin(mac) == 0) {
+  while (Ethernet.begin(mac, 6000, 4000) == 0) {
     dhcpTry++;
     lcd.clear();
     lcd.setCursor(1, Ports / 2 - 1);
