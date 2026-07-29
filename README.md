@@ -82,17 +82,17 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 
 ## Konfiguracja (dyrektywy `#define`)
 
-| Define          | Opis                                                        |
-|-----------------|-------------------------------------------------------------|
-| `Inputs`        | liczba anten (6)                                            |
-| `Ports`         | liczba par IN/OUT i linii LCD (2)                           |
-| `inputHigh`     | poziom aktywny wejść (HIGH — domyślnie)                     |
-| `OTRSP`         | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | + surowy TCP dla OTRSP (wymaga `OTRSP`, wyklucza `EthModule`) |
-| `OTRSP_TCP_PORT`| port surowego TCP dla OTRSP (domyślnie 4534)                |
-| `SERBAUD`       | prędkość portu szeregowego (9600)                           |
-| `EthModule`     | włącza moduł Ethernet + interfejs WWW                       |
-| `__USE_DHCP__`  | DHCP dla modułu Ethernet (**wył. domyślnie** — koszt ~3,8 KB flash z oficjalną biblioteką) |
+| Define          | Domyślnie | Opis                                                        |
+|-----------------|-----------|---------------------------------------------------------------|
+| `Inputs`        | 6         | liczba anten (stała — zmiana nie jest w pełni zaimplementowana) |
+| `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
+| `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
+| `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
+| `OTRSP_TCP`     | WYŁ.      | + surowy TCP dla OTRSP (wymaga `OTRSP`, wyklucza `EthModule`) |
+| `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
+| `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
+| `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW                        |
+| `__USE_DHCP__`  | WYŁ.      | DHCP dla modułu Ethernet (koszt ~3,8 KB flash z oficjalną biblioteką) |
 
 ### Funkcje opcjonalne (SQ9FK)
 
