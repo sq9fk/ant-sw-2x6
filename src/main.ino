@@ -214,9 +214,11 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   const char HTTP_HEAD2[] PROGMEM =
     "<meta charset=\"utf-8\">\r\n"
     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\r\n"
+    "<meta name=\"theme-color\" content=\"#12333b\">\r\n"
     "<style>\r\n"
-    "body{margin:0;padding:0 0 1.5rem;min-width:290px;background:#12333b;color:#f7f7f7;"
-      "font-family:Inter,Helvetica,Arial,sans-serif}\r\n"
+    // SQ9FK: mobile @media (max-width:520px) - wieksze cele dotykowe, kompaktowy topbar/chipy
+    "body{margin:0;padding:0 0 calc(1.5rem + env(safe-area-inset-bottom,0));min-width:290px;"
+      "background:#12333b;color:#f7f7f7;font-family:Inter,Helvetica,Arial,sans-serif}\r\n"
     ".tb{display:flex;align-items:center;gap:.55rem;max-width:760px;margin:0 auto;"
       "padding:.9rem 1.2rem;font-weight:800;font-size:1.1rem}\r\n"
     ".dot{width:.6rem;height:.6rem;border-radius:50%;background:#06ac51;flex:0 0 auto}\r\n"
@@ -260,6 +262,11 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     ".nm b{min-width:3rem;color:#a7b9be;font-weight:600;font-size:.85rem}\r\n"
     ".rows .row{display:flex;justify-content:space-between;padding:.5rem 0 0}\r\n"
     ".rows span{color:#a7b9be}\r\n"
+    "@media(max-width:520px){.tb{font-size:.95rem;padding:.7rem max(.85rem,env(safe-area-inset-right)) "
+      ".7rem max(.85rem,env(safe-area-inset-left))}.astat{min-width:0;flex:1 1 100%}.bcd,.bcdr{min-width:0;"
+      "margin-right:.2rem;font-size:.82rem;padding:.35rem .55rem}input[type=submit],.flx{min-width:2.75rem;"
+      "min-height:2.75rem;padding:.45rem .55rem;margin:.15rem}.flx svg{width:18px;height:18px}.trx{gap:.25rem;"
+      "padding:.65rem 0}.nm{flex-wrap:wrap}}\r\n"
     "</style>\r\n</head>\r\n<body>\r\n";
 
   // SQ9FK: ikona power (wlacz/wylacz) dla przyciskow Flex - dziedziczy kolor (currentColor)
