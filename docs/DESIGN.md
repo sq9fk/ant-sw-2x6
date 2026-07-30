@@ -30,15 +30,15 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
 | `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
-| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~4 B) |
+| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~90 B) |
 | `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 
 **Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `OTRSP` i `OTRSP_TCP` są
 **niezależne od siebie** — wspólny `OTRSP_parse()` kompiluje się, gdy zdefiniowany jest
 którykolwiek z nich (patrz §8). `EthModule` (strona WWW) **mieści się z każdym z nich osobno**:
-samo `OTRSP` (USB) — zmierzone **97,9%**, zapas ~650 B; samo `OTRSP_TCP` (gniazdo TCP) —
-zmierzone **99,2%**, zapas **~246 B** (najciaśniejszy wariant, patrz §9). **Oba naraz**
+samo `OTRSP` (USB) — zmierzone **98,4%**, zapas ~484 B; samo `OTRSP_TCP` (gniazdo TCP) —
+zmierzone **99,7%**, zapas **~90 B** (najciaśniejszy wariant, patrz §9). **Oba naraz**
 (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieszczą się** (brakuje ~116 B) — `#error` w kodzie
 wymusza to w compile-time. **Domyślnie: Ethernet wł. + `OTRSP_TCP` wł.** (strona WWW + OTRSP
 po TCP), `OTRSP` (USB) wył. — to najciaśniejszy z pięciu wariantów i jest teraz domyślny,
@@ -173,6 +173,12 @@ i kończy (`delay(1); client.stop()`).
   konsumentem jest parser na moście (szuka podciągu `A=`), nie przeglądarka, więc rezygnacja
   z poprawnego HTML-a nic nie kosztuje, a endpoint jest tani we flashu (patrz §9). Bez tego most
   musiałby parsować pełny HTML karty Anteny, co jest kruche przy każdej zmianie jej wyglądu.
+- `K` — **nazwy anten dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź `K=` + 6 nazw (`antName(k)`,
+  k=1..6) rozdzielonych przecinkiem, tak żeby jego legenda pokazywała **prawdziwe** nazwy z tego
+  urządzenia zamiast osobnej, ręcznie duplikowanej kopii po drugiej stronie. Ta sama zasada co `J`
+  (reużywa `HTTP_HEAD`), ale droższa — pętla po 6 nazwach zmiennej długości zamiast dwóch liczb —
+  **+72 B, zapas na domyślnym wariancie spadł do ~106 B** (patrz §9). Separator `,`: nazwa anteny
+  nie powinna go zawierać (`parseName()` tego nie zabrania, ale nikt tak nie robi).
 - `F{s}{0|1}` — **Radio Flex** (SQ9FK): `s`=`reqBuf[7]` (1/2), stan=`reqBuf[8]` → `flexState[s-1]`.
 - `R1` — **Restart** (przycisk w Settings): ustawia `pendingRestart`; sam restart (watchdog
   z timeoutem 15 ms) wykonuje się dopiero na początku **następnej** iteracji `loop()` (patrz §4),
@@ -255,6 +261,20 @@ statyczne, bez wyjątków.
 (reużywa `HTTP_HEAD` zamiast nowego literału — koszt to praktycznie tylko warunek + `F("A=")` +
 dwa `out.print()` już używane gdzie indziej). Domyślny build: **Flash 99,4 %** (30542 B) —
 **zapas ~178 B**. Zmierzono wszystkie 5 wariantów po tej zmianie, wszystkie się mieszczą.
+
+**Endpoint `/?K`** (2026-07-29, patrz §7) dodał kolejne **+72 B** — pętla po 6 nazwach (`antName(k)`)
+zamiast dwóch liczb jak w `/?J`, więc drożej mimo tego samego triku (reużycie `HTTP_HEAD`). Domyślny
+build: **Flash 99,7 %** (30614 B) — **zapas ~106 B**. To już bardzo mało: kolejna zmiana we
+współdzielonym kodzie WWW/OTRSP_TCP może wymagać najpierw znalezienia oszczędności gdzie indziej,
+zanim się zmieści. Zmierzono wszystkie 5 wariantów, wszystkie się mieszczą.
+
+**Nazwa stacji w `/?K`** (2026-07-30): rotator_wifi_bridge pokazuje teraz nazwę tego urządzenia przy
+nagłówku karty Anteny — dokładnie tak, jak już pokazuje nazwy anten, żywo z urządzenia zamiast
+osobnej kopii. Dopisana jako **7. pole** istniejącej odpowiedzi `/?K` (`out.print(',');
+out.print(siteName());`) zamiast nowego endpointu — koszt to tylko te dwa wywołania, +16 B (nie
++68 B jak nowy endpoint reużywający `HTTP_HEAD`). Domyślny build: **Flash 99,7 %** (30630 B) —
+**zapas ~90 B**. Zmierzono wszystkie trzy warianty z `EthModule` (jedyne, które w ogóle kompilują
+handler `/?K`), wszystkie się mieszczą.
 
 **Domyślny build to `EthModule` + `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+):
 **Flash 99,2 %** (30474 B, przed `/?J`) / **RAM 52,5 %** (1075 B) — było **~246 B** zapasu. To najciaśniejszy
@@ -343,11 +363,11 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
 - **Pięć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) **domyślny** —
   `#define EthModule` + `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP,
-  **99,2% — zapas ~246 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
+  **99,7% — zapas ~90 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
   każdej zmianie w WWW/CSS/OTRSP_TCP/sieci, bo trafia do każdego kto skompiluje projekt bez
   ruszania `#define`; (2) `#define EthModule` + `//#define OTRSP` + `//#define OTRSP_TCP`
-  (strona WWW bez OTRSP, static IP, 96,2%, zapas ~1,1 KB — bezpieczniejsza alternatywa); (3)
-  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 97,9%);
+  (strona WWW bez OTRSP, static IP, 96,7%, zapas ~1 KB — bezpieczniejsza alternatywa); (3)
+  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 98,4%);
   (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 38,0%); (5) `#define OTRSP`
   + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 70,5%).
   Kombinacja `EthModule` + `OTRSP` + `OTRSP_TCP` (wszystkie trzy naraz) **musi** dać `#error`

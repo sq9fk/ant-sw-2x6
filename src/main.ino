@@ -628,6 +628,26 @@ void loop() {
             out.done();
             break;
           }
+          // SQ9FK: /?K - nazwy anten 1..6 + nazwa stacji dla rotator_wifi_bridge (legenda pod
+          // przyciskami + nagl. karty Anteny), zeby pokazywal PRAWDZIWE dane z tego urzadzenia
+          // zamiast osobnej, recznie duplikowanej kopii. antName(k)/siteName() zwracaja char*
+          // (WWW_EEPROM_NAMES) lub FSH* (PROGMEM) zaleznie od flagi - out.print() obsluguje oba,
+          // jak wszedzie indziej w tym pliku. Separator ',' - zaden z tych stringow nie powinien
+          // go zawierac (parseName() tego nie zabrania, ale nikt tak nie robi). Nazwa stacji jest
+          // 7-mym polem (po 6 nazwach anten), a nie osobnym endpointem - +7 B, nie +68 B jak nowy
+          // endpoint reuzywajacy HTTP_HEAD (patrz docs/DESIGN.md - budzet flash ~106 B).
+          if (reqBuf[6] == 'K') {
+            out.print((const __FlashStringHelper*)HTTP_HEAD);
+            out.print(F("K="));
+            for (byte k = 1; k <= 6; k++) {
+              if (k > 1) out.print(',');
+              out.print(antName(k));
+            }
+            out.print(',');
+            out.print(siteName());
+            out.done();
+            break;
+          }
           // ---- naglowek HTTP + <head> + CSS: statyczne, z PROGMEM (przez bufor) ----
           out.print((const __FlashStringHelper*)HTTP_HEAD);
           out.print(F("<title>"));

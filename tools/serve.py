@@ -40,6 +40,11 @@ WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 # SQ9FK: stan anteny wybranej dla TRX1/TRX2 (0=OFF, 1..6), sluzy wylacznie do symulacji
 # /?J i /?S{bank}{kod} dla testu integracji z rotator_wifi_bridge - patrz make_handler().
 antenna_state = [0, 0]
+# SQ9FK: nazwy anten 1..6 dla symulacji /?K (patrz make_handler) - domyslne jak antDefault[]
+# w src/main.ino.
+antenna_names = ["ANT1", "ANT2", "ANT3", "ANT4", "ANT5", "ANT6"]
+# SQ9FK: nazwa stacji (siteName() w src/main.ino) - 7-me pole w /?K, po nazwach anten.
+site_name = "SQ9FK"
 
 
 class WSConnection:
@@ -213,13 +218,21 @@ class OtrspBridge:
 def make_handler(bridge):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
-            # SQ9FK: symuluje wylacznie /?J i /?S{bank}{kod} - dwie wartosci anten (TRX1/TRX2),
+            # SQ9FK: symuluje wylacznie /?J, /?K i /?S{bank}{kod} - stan i nazwy anten (TRX1/TRX2),
             # zeby rotator_wifi_bridge dalo sie przetestowac bez sprzetu. Nie modeluje calego
-            # urzadzenia (kolizje/PTT/BCD/nazwy) - to jedyne dwa punkty, ktorych most uzywa.
+            # urzadzenia (kolizje/PTT/BCD) - to jedyne punkty, ktorych most uzywa.
             if self.path.startswith("/?"):
                 query = self.path[2:]
                 if query == "J":
                     body = f"A={antenna_state[0]},{antenna_state[1]}".encode()
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.send_header("Content-Length", str(len(body)))
+                    self.end_headers()
+                    self.wfile.write(body)
+                    return
+                if query == "K":
+                    body = ("K=" + ",".join(antenna_names) + "," + site_name).encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.send_header("Content-Length", str(len(body)))

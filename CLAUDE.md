@@ -24,7 +24,7 @@ zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
   `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
-  WWW_EEPROM_NAMES WŁ.** — Flash **99,2%** (30474 B) / RAM **52,5%** (1075 B), **zapas ~246 B**.
+  WWW_EEPROM_NAMES WŁ.** — Flash **99,7%** (30630 B) / RAM **52,5%** (1075 B), **zapas ~90 B**.
   To NAJCIASNIEJSZY z pieciu wariantow i jest domyslny — KAZDA zmiana we wspoldzielonym kodzie
   (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na tym wariancie NAJPIERW.
   Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
@@ -44,10 +44,10 @@ zawsze.
   USB). Serial i EthernetClient dziedzicza po `Print` — nie duplikuj logiki komend przy zmianach.
   **Piec wariantow** (`#error` wymusza wykluczenie TYLKO wszystkich trzech naraz —
   `EthModule`+`OTRSP`+`OTRSP_TCP` razem NIE miesci sie, brakuje ~116 B; kazda inna kombinacja
-  dziala): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **99,2%**
-  (30474 B) **— zapas ~246 B**; (2) `EthModule` — strona WWW bez OTRSP, 96,2% (29552 B,
-  zapas ~1,1 KB, bezpieczniejszy jesli OTRSP-TCP niepotrzebne); (3) `EthModule`+`OTRSP` — strona
-  WWW + OTRSP po USB, **97,9%** (30070 B, zapas ~650 B); (4) `OTRSP` — OTRSP tylko po USB, bez
+  dziala): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **99,7%**
+  (30630 B) **— zapas ~90 B**; (2) `EthModule` — strona WWW bez OTRSP, 96,7% (29712 B,
+  zapas ~1 KB, bezpieczniejszy jesli OTRSP-TCP niepotrzebne); (3) `EthModule`+`OTRSP` — strona
+  WWW + OTRSP po USB, **98,4%** (30236 B, zapas ~484 B); (4) `OTRSP` — OTRSP tylko po USB, bez
   Ethernetu, 38,0% (11680 B); (5) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
   (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **70,5%** (21652 B).
   Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w `EthernetClient`
@@ -103,7 +103,10 @@ zawsze.
   Parsowanie żądania jest **bez `String`** — z bufora `reqBuf` (`S{bank}{kod}`:
   bank=`reqBuf[7]`, kod=`reqBuf[8..9]`; `F{s}{0|1}` = Radio Flex; `R1` = Restart (patrz
   „Budżet pamięci" wyżej); `J` = odczyt stanu dla [rotator_wifi_bridge](https://github.com/sq9fk/rotator_wifi_bridge)
-  (`A=ant1,ant2`, reużywa `HTTP_HEAD`, +68 B, patrz `docs/DESIGN.md` §7/§9); przy `WWW_EEPROM_NAMES` też
+  (`A=ant1,ant2`, reużywa `HTTP_HEAD`, +68 B); `K` = nazwy anten + nazwa stacji dla tego samego
+  mostu (`K=` + 6 nazw + nazwa stacji, przez przecinek, łącznie +88 B — **zapas na domyślnym
+  wariancie to już tylko ~90 B**, patrz `docs/DESIGN.md` §7/§9 przed kolejną zmianą we
+  współdzielonym kodzie WWW); przy `WWW_EEPROM_NAMES` też
   `N{k}={nazwa}` (antena), `NS={nazwa}` (nazwa stacji), `N{I|G|M|D}={a.b.c.d}` (IP/gateway/maska/
   DNS) od `reqBuf[6]`), z walidacją cyfr i
   `bankIdx 0..Ports-1`. Odczyt żądania jest **batchowany** (`client.read(reqBuf+…, avail)` +
@@ -206,7 +209,7 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
   `#ifdef` nie uległy rozjechaniu. **Pięć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
   — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` to
-  **domyślny build** i ma zapas ~246 B — buduj go PIERWSZY (nie ostatni) przy każdej zmianie,
+  **domyślny build** i ma zapas ~90 B — buduj go PIERWSZY (nie ostatni) przy każdej zmianie,
   bo to on trafi do każdego, kto skompiluje projekt bez modyfikacji `#define`.
 - **Wygląd interfejsu WWW i protokół OTRSP** można podejrzeć bez sprzętu: `tools/websim.html`
   (odtwarza HTML/CSS firmware + symuluje `OTRSP_parse()` — dwa niezależne monitory USB/TCP,
