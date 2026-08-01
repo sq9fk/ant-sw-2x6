@@ -89,6 +89,15 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   stałym adresem, ustawionym w `src/main.ino` lub edytowalnym po flashowaniu przez WWW+EEPROM
   (patrz „Konfiguracja sieciowa" wyżej), IP na LCD widoczne od razu przy starcie.
 - Optymalizacja rozmiaru firmware (PROGMEM, pętle WWW) i utwardzenie serwera WWW.
+- **Przegląd bezpieczeństwa/poprawności (2026-07-29)** — 6 poprawek: (1) walidacja zakresu w
+  OTRSP `AUX1n`/`AUX2n` (wartości >6 wcześniej powodowały odczyt poza tablicą `antRAM[]` przy
+  najbliższym odświeżeniu LCD/WWW); (2) timeout 2 s na odczyt żądania WWW (wolny/zawieszony
+  klient trzymał `loop()` w nieskończonej pętli, docelowo do resetu przez watchdog); (3) `volatile`
+  dla zmiennych dzielonych z ISR enkodera (`enc0Pos`, `e`, `Timeout[]`); (4) usunięcie `String` z
+  `show()` (heap-alokacje co ~100 ms — przy okazji odzyskało **~660 B flash**, znacznie
+  poprawiając zapas domyślnego buildu); (5) `enc2()` używa własnego parametru zamiast globalnej
+  zmiennej; (6) powiększony bufor żądania WWW (56 B zamiast 48 B — mocno zakodowana 11-znakowa
+  nazwa anteny mogła się wcześniej obcinać w połowie).
 - **Biblioteka Ethernet: oficjalna `arduino-libraries/Ethernet`** (była `adafruit/Ethernet2` —
   przestarzała/nieutrzymywana). Kosztuje więcej flash niż Ethernet2 (obsługa W5100/W5200/W5500
   z auto-detekcją chipu w runtime, niewyłączalna `#define`m). **DHCP usunięte z projektu** —
@@ -170,9 +179,10 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. + OTRSP po TCP WŁ.** (strona WWW + gniazdo TCP dla
 > OTRSP, np. dla N1MM+, port 4534 — static IP). Build zweryfikowany: `pio run -e nanoatmega328`
-> → **SUCCESS**, bez ostrzeżeń (Flash **99,7%** / 30630 B — **zapas ~90 B**, RAM **52,5%** / 1075 B
+> → **SUCCESS**, bez ostrzeżeń (Flash **97,0%** / 29810 B — **zapas ~910 B**, RAM **51,8%** / 1061 B
 > — domyślne flagi: BCD/PTT wył., nazwy WWW wł., konfiguracja sieciowa edytowalna wł., watchdog wł.,
-> endpointy `/?J`+`/?K` (z nazwą stacji) dla `rotator_wifi_bridge` wł.).
+> endpointy `/?J`+`/?K` dla `rotator_wifi_bridge` wł.). Zapas znacząco się poprawił po usunięciu
+> `String` z `show()` (patrz niżej) — wcześniej było ~246 B.
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
@@ -187,21 +197,24 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
 > **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
 > - **Strona WWW + OTRSP po surowym TCP** (**obecnie, domyślne**): `#define EthModule`,
->   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **99,7%** (30630 B), RAM **52,5%** (1075 B)
->   — zapas ~90 B. Nadal najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
+>   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **97,0%** (29810 B), RAM **51,8%** (1061 B)
+>   — zapas ~910 B. Wciąż najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
 >   zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
 > - **Strona WWW, static IP, bez OTRSP**: `#define EthModule`, `//#define OTRSP`,
->   `//#define OTRSP_TCP` → Flash **96,7%** (29712 B), RAM **48,3%** (989 B) — zapas ~1 KB,
+>   `//#define OTRSP_TCP` → Flash **93,9%** (28856 B), RAM **47,6%** (975 B) — zapas ~1,8 KB,
 >   bezpieczniejszy wybór jeśli OTRSP-TCP nie jest potrzebne.
 > - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **98,4%** (30236 B), RAM **51,5%** (1055 B) — zapas ~484 B
+>   → Flash **95,4%** (29316 B), RAM **50,8%** (1041 B) — zapas ~1,4 KB
 > - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **38,0%** (11680 B), RAM **37,3%** (763 B)
+>   → Flash **33,6%** (10322 B), RAM **36,1%** (739 B)
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
->   `#define OTRSP`, `#define OTRSP_TCP` → Flash **70,5%** (21652 B), RAM **54,3%** (1112 B)
+>   `#define OTRSP`, `#define OTRSP_TCP` → Flash **68,0%** (20900 B), RAM **53,6%** (1098 B)
 >
-> Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieści się**
-> (brakuje ~116 B) — to jedyna blokowana kombinacja, wymuszona `#error` w compile-time.
+> Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nadal jest
+> blokowana** przez `#error` w `src/main.ino` — ale po odzyskaniu flash (patrz niżej) **już by się
+> zmieściła** (zmierzone: 97,3%/29896 B, zapas ~824 B, zamiast wcześniejszego niedoboru ~116 B).
+> `#error` i jego treść ("brakuje ~116 B") są celowo **zostawione bez zmian** — decyzja czy
+> odblokować tę kombinację jako 6. wariant to osobny temat, nie część tej poprawki.
 
 ### Optymalizacje rozmiaru (zastosowane)
 

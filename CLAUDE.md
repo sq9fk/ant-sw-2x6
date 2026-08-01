@@ -24,8 +24,9 @@ zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
   `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
-  WWW_EEPROM_NAMES WŁ.** — Flash **99,7%** (30630 B) / RAM **52,5%** (1075 B), **zapas ~90 B**.
-  To NAJCIASNIEJSZY z pieciu wariantow i jest domyslny — KAZDA zmiana we wspoldzielonym kodzie
+  WWW_EEPROM_NAMES WŁ.** — Flash **97,0%** (29810 B) / RAM **51,8%** (1061 B), **zapas ~910 B**
+  (poprawilo sie znaczaco po usunieciu `String` z `show()` przy przegladzie bugow 2026-07-29 -
+  wczesniej ~90 B). To NAJCIASNIEJSZY z pieciu wariantow i jest domyslny — KAZDA zmiana we wspoldzielonym kodzie
   (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na tym wariancie NAJPIERW.
   Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
   rozwijac kod, wydziel powtarzajace sie fragmenty PROGMEM do wspolnych stalych - patrz `nmOpen`/
@@ -43,13 +44,16 @@ zawsze.
   defined(OTRSP_TCP)`; `serialEvent()`/`in_buf` zostaja pod samym `OTRSP`, bo sa specyficzne dla
   USB). Serial i EthernetClient dziedzicza po `Print` — nie duplikuj logiki komend przy zmianach.
   **Piec wariantow** (`#error` wymusza wykluczenie TYLKO wszystkich trzech naraz —
-  `EthModule`+`OTRSP`+`OTRSP_TCP` razem NIE miesci sie, brakuje ~116 B; kazda inna kombinacja
-  dziala): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **99,7%**
-  (30630 B) **— zapas ~90 B**; (2) `EthModule` — strona WWW bez OTRSP, 96,7% (29712 B,
-  zapas ~1 KB, bezpieczniejszy jesli OTRSP-TCP niepotrzebne); (3) `EthModule`+`OTRSP` — strona
-  WWW + OTRSP po USB, **98,4%** (30236 B, zapas ~484 B); (4) `OTRSP` — OTRSP tylko po USB, bez
-  Ethernetu, 38,0% (11680 B); (5) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
-  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **70,5%** (21652 B).
+  `EthModule`+`OTRSP`+`OTRSP_TCP` razem NIE miesci sie wedlug tresci `#error` (brakuje ~116 B),
+  choc po przegladzie bugow 2026-07-29 (odzyskane ~660 B z `String`) TA KOMBINACJA JUZ BY SIE
+  ZMIESCILA (zmierzone: 97,3%/29896 B, zapas ~824 B) - `#error` zostal CELOWO bez zmian, bo
+  decyzja o odblokowaniu 6. wariantu to osobny temat: (1) `EthModule`+`OTRSP_TCP` — strona WWW +
+  OTRSP po TCP, **DOMYSLNY**, **97,0%** (29810 B) **— zapas ~910 B**; (2) `EthModule` — strona
+  WWW bez OTRSP, 93,9% (28856 B, zapas ~1,8 KB, bezpieczniejszy jesli OTRSP-TCP niepotrzebne);
+  (3) `EthModule`+`OTRSP` — strona WWW + OTRSP po USB, **95,4%** (29316 B, zapas ~1,4 KB); (4)
+  `OTRSP` — OTRSP tylko po USB, bez Ethernetu, 33,6% (10322 B); (5) `OTRSP`+`OTRSP_TCP` — OTRSP
+  po USB **i** surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW,
+  **68,0%** (20900 B).
   Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w `EthernetClient`
   (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna) to koszt JUZ
   OBECNY w kazdym buildzie z `EthernetClient` (nawet w najlzejszym WWW-bez-OTRSP) — nie jest to

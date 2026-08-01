@@ -370,6 +370,7 @@ function otrspRespond(cmd){
     let val = parseInt(cmd.substring(4), 10);
     if (isNaN(val)) val = 0;
     val = val & 15;
+    if (val > 6) val = 0;   // SQ9FK: zgodnie z firmware (main.ino) - poza 0..6 antName() czytalby OOB
     if (idx < state.ports) { state.port[idx].sel = val; render(); }
     return null;                                      // firmware nic nie odsyla po SET
   }

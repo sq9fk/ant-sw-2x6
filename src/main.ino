@@ -389,17 +389,20 @@ int i = 0;
 int j = 0;
 int c = 0;
 int val;
-int e = 0;
+// SQ9FK: volatile - e/enc0Pos/Timeout sa zapisywane w encI() (ISR enkodera) i czytane w loop()/
+// show(); bez volatile kompilator moze buforowac stare wartosci w rejestrach, a Timeout[3][0]
+// (unsigned long, 4 bajty) jest podatny na "torn read" jesli przerwanie trafi w srodek odczytu.
+volatile int e = 0;
 const int enc0PinA = 2;
 const int enc0PinB = 3;
 const int sw = 9;
 const int swLED = 8;
-int enc0Pos = 0;
+volatile int enc0Pos = 0;
 byte enc0PinALast = HIGH;
 int n = HIGH;
 boolean menu1state = false;
 boolean menu2state = false;
-unsigned long Timeout[5][2] = {
+volatile unsigned long Timeout[5][2] = {
   {0, 100},
   {0, 500},
   {0, 1000},
@@ -418,7 +421,6 @@ const byte glyphs[6][8] PROGMEM = {
   {0b00011, 0b00010, 0b11010, 0b11010, 0b11010, 0b00010, 0b00011, 0b00000}, // 4 mCursor
   {0b00011, 0b00010, 0b00010, 0b00010, 0b00010, 0b00010, 0b00011, 0b00000}, // 5 m
 };
-String Note;
 byte port[8][6] = {
   //  adr   # ptt Err Manual part
   { 0x21, 0, 0,  0, 0, 1 }, // port1 IN
@@ -594,15 +596,22 @@ void loop() {
   if (client) {
     // SQ9FK (#5): bufor linii zadania bez String (mniej sterty). Dla komend anteny
     // potrzebne indeksy 7 (bank) i 8-9 (kod); dla edycji nazw (WWW_EEPROM_NAMES) tez wartosc.
+    // SQ9FK: 56 B - "GET /?N1=" (9) + nazwa 11 znakow w pelni %XX-zakodowana (33) + " HTTP/1.1\r\n"
+    // (11) = 53 + NUL = 54, z niewielkim zapasem. Bylo 48 B - mocno zakodowana nazwa (dużo znakow
+    // specjalnych) moglaby sie obcinac w polowie (bezpiecznie, ale dawalo znieksztalcona nazwe).
 #if defined(WWW_EEPROM_NAMES)
-    char reqBuf[48];
+    char reqBuf[56];
 #else
     char reqBuf[16];
 #endif
     byte reqLen = 0;
+    // SQ9FK: timeout odczytu - bez tego wolny/zawieszony klient (albo taki co sie polaczy i nic
+    // nie wysle) trzymalby te petle bez konca, blokujac cala reszte loop() (przelaczanie anten,
+    // OTRSP) az do watchdoga (~8s reset calego urzadzenia zamiast zwyklego odrzucenia klienta).
+    unsigned long reqStart = millis();
     // SQ9FK (#4): czytamy tylko pierwsza linie zadania (GET ...) i od razu odpowiadamy
     // -> mniej odczytow i krotsza blokada loop() (switching/PTT).
-    while (client.connected()) {
+    while (client.connected() && millis() - reqStart < 2000) {
       int avail = client.available();
       if (avail > 0) {
         // SQ9FK: czytaj dostepne bajty jednym recv (zamiast po bajcie -> mniej transakcji SPI)
@@ -1016,7 +1025,7 @@ void encI(){
 //=====[ Encoder2 ]========================== with interrupt
 
 int enc2(int encPos, int range, int count) {
-  encPos = encPos + e;
+  encPos = encPos + count;   // SQ9FK: uzywaj parametru, nie globalnego "e" (dzialalo tylko bo kazde wywolanie przekazuje e jako count)
   if(encPos>range){
     encPos = 0;
   }
@@ -1100,16 +1109,23 @@ void show(int portNR) {
   }
   //=====[ Note ]=================
   lcd.setCursor(5, portNR);
+  // SQ9FK: bufor na stosie zamiast globalnego String - show() jest wolane co ~100 ms dla kazdego
+  // TRX; String += w petli alokuje/realokuje na stercie, co na 2 KB RAM przy urzadzeniu dzialajacym
+  // tygodniami/miesiacami grozi fragmentacja sterty. Bez alokacji.
+  char noteBuf[LCDculumn - 5 + 1];
   if (port[portNR][3] == 1 && port[portNR][1] != 0) {
-    Note = "- (used)";
+    strcpy_P(noteBuf, PSTR("- (used)"));
   } else {
-    Note = antName(port[portNR][1]);
+#if defined(WWW_EEPROM_NAMES)
+    strncpy(noteBuf, antName(port[portNR][1]), sizeof(noteBuf) - 1);
+#else
+    strncpy_P(noteBuf, (PGM_P)antName(port[portNR][1]), sizeof(noteBuf) - 1);
+#endif
+    noteBuf[sizeof(noteBuf) - 1] = '\0';   // strncpy nie gwarantuje NUL, gdy zrodlo >= n znakow
   }
-  Note.remove(LCDculumn - 5);
-  while (Note.length() < LCDculumn - 5) {
-    Note += " ";
-  }
-  lcd.print(Note);
+  for (byte p = strlen(noteBuf); p < LCDculumn - 5; p++) noteBuf[p] = ' ';
+  noteBuf[LCDculumn - 5] = '\0';
+  lcd.print(noteBuf);
 #if defined(BCD_INPUT)
   if (port[portNR][1] == 7) { // SQ9FK: poz. 7 = tryb BCD ("M-off->BCD") - wskaznik "M" + numer TRX
     lcd.setCursor(5, portNR);
@@ -1300,6 +1316,14 @@ static void OTRSP_parse(char *cmd, Print &out) {
     if (COMPARE("AUX1") || COMPARE("AUX2")) {
         byte idx = (cmd[3] == '2') ? 1 : 0;               // "AUX1"->port[0], "AUX2"->port[1]
         int val = atoi((char *)&cmd[AFTER("AUXn")]) & 15;
+        // SQ9FK: walidacja zakresu - "& 15" dopuszcza 0..15, ale antRAM/antDefault maja tylko
+        // 7 (0..6) albo 8 (0..7 z BCD_INPUT) wpisow. Bez tego np. "AUX110" ustawia port[][1]=10,
+        // co przy najblizszym show()/renderze WWW wywoluje antName(10) -> odczyt POZA antRAM[8][].
+        #if defined(BCD_INPUT)
+          if (val > 7) val = 0;
+        #else
+          if (val > 6) val = 0;
+        #endif
         #if defined(OTRSP_DEBUG)
           Serial.print(F("Debug: ")); Serial.print(cmd);
           Serial.print(F(" idx=")); Serial.print(idx);

@@ -30,19 +30,21 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
 | `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
-| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~90 B) |
+| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~910 B) |
 | `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 
 **Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `OTRSP` i `OTRSP_TCP` są
 **niezależne od siebie** — wspólny `OTRSP_parse()` kompiluje się, gdy zdefiniowany jest
 którykolwiek z nich (patrz §8). `EthModule` (strona WWW) **mieści się z każdym z nich osobno**:
-samo `OTRSP` (USB) — zmierzone **98,4%**, zapas ~484 B; samo `OTRSP_TCP` (gniazdo TCP) —
-zmierzone **99,7%**, zapas **~90 B** (najciaśniejszy wariant, patrz §9). **Oba naraz**
-(`EthModule`+`OTRSP`+`OTRSP_TCP`) **nie mieszczą się** (brakuje ~116 B) — `#error` w kodzie
-wymusza to w compile-time. **Domyślnie: Ethernet wł. + `OTRSP_TCP` wł.** (strona WWW + OTRSP
-po TCP), `OTRSP` (USB) wył. — to najciaśniejszy z pięciu wariantów i jest teraz domyślny,
-patrz §9/§11.
+samo `OTRSP` (USB) — zmierzone **95,4%**, zapas ~1,4 KB; samo `OTRSP_TCP` (gniazdo TCP) —
+zmierzone **97,0%**, zapas **~910 B** (najciaśniejszy wariant, patrz §9). **Oba naraz**
+(`EthModule`+`OTRSP`+`OTRSP_TCP`) — treść `#error` nadal mówi "brakuje ~116 B", ale po przeglądzie
+bugów 2026-07-29 (odzyskane ~660 B z usunięcia `String`) ta kombinacja faktycznie by się
+zmieściła (zmierzone: 97,3%, zapas ~824 B); `#error` został **celowo** zostawiony bez zmian —
+odblokowanie 6. wariantu to osobna decyzja. **Domyślnie: Ethernet wł. + `OTRSP_TCP` wł.** (strona
+WWW + OTRSP po TCP), `OTRSP` (USB) wył. — to najciaśniejszy z pięciu wariantów i jest teraz
+domyślny, patrz §9/§11.
 **Pięć wariantów** — patrz §9, §11.
 
 ## 3. Model stanu — `port[8][6]`
@@ -277,21 +279,22 @@ out.print(siteName());`) zamiast nowego endpointu — koszt to tylko te dwa wywo
 handler `/?K`), wszystkie się mieszczą.
 
 **Domyślny build to `EthModule` + `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+):
-**Flash 99,2 %** (30474 B, przed `/?J`) / **RAM 52,5 %** (1075 B) — było **~246 B** zapasu. To najciaśniejszy
-z pięciu wariantów (patrz §11) i jest teraz domyślny — każda zmiana we współdzielonym kodzie
-(WWW HTML/CSS, `OTRSP_parse()`, sieć) musi być zbudowana i zmierzona na tym wariancie
-**najpierw**. Ciekawostka: sam kanał TCP (`EthernetServer`/`EthernetClient`) kosztuje więcej
-flash niż kanał USB (`serialEvent()` + `in_buf`), mimo że intuicyjnie wydawałoby się odwrotnie
-— kod OTRSP_TCP (parser + bufor + logika w `loop()`) waży ~968 B. (Uwaga:
-`EthernetClient::connect(hostname)`/`DNSClient::getHostByName` — ~1,2 KB martwego kodu
-ciągniętego przez wirtualną tabelę `EthernetClient` — to koszt **już obecny w każdym buildzie
-z `EthernetClient`**, nawet w najlżejszym WWW-bez-OTRSP, nie coś specyficznego dla
-`OTRSP_TCP`.) Pierwotny niedobór 42 B odzyskano **poprawką logiki reconnect** w bloku
-„OTRSP TCP" (`loop()`, patrz §8) — poprzednia wersja resetowała `otrspClient` przez
+**Flash 97,0 %** (29810 B) — **~910 B** zapasu (patrz przegląd bugów 2026-07-29 wyżej — było
+99,7 %/30630 B, ~90 B, przed tym przeglądem). To najciaśniejszy z pięciu wariantów (patrz §11)
+i jest teraz domyślny — każda zmiana we współdzielonym kodzie (WWW HTML/CSS, `OTRSP_parse()`,
+sieć) musi być zbudowana i zmierzona na tym wariancie **najpierw**. Ciekawostka: sam kanał TCP
+(`EthernetServer`/`EthernetClient`) kosztuje więcej flash niż kanał USB (`serialEvent()` +
+`in_buf`), mimo że intuicyjnie wydawałoby się odwrotnie — kod OTRSP_TCP (parser + bufor + logika
+w `loop()`) waży ~968 B. (Uwaga: `EthernetClient::connect(hostname)`/`DNSClient::getHostByName`
+— ~1,2 KB martwego kodu ciągniętego przez wirtualną tabelę `EthernetClient` — to koszt **już
+obecny w każdym buildzie z `EthernetClient`**, nawet w najlżejszym WWW-bez-OTRSP, nie coś
+specyficznego dla `OTRSP_TCP`.) Pierwotny niedobór 42 B odzyskano **poprawką logiki reconnect**
+w bloku „OTRSP TCP" (`loop()`, patrz §8) — poprzednia wersja resetowała `otrspClient` przez
 `otrspClient = EthernetClient()` zamiast po prostu wołać `.stop()` na starym połączeniu przy
 zastąpieniu nowym, co dodatkowo **poprawiło poprawność** (stare gniazdo W5500 jest teraz
-zawsze jawnie zamykane). **Oba kanały OTRSP naraz** (`EthModule`+`OTRSP`+`OTRSP_TCP`) nadal
-**nie mieszczą się** (brakuje ~116 B) — `#error` blokuje tę jedną kombinację.
+zawsze jawnie zamykane). **Oba kanały OTRSP naraz** (`EthModule`+`OTRSP`+`OTRSP_TCP`) —
+`#error` w kodzie nadal blokuje tę kombinację, choć po przeglądzie bugów 2026-07-29 technicznie
+by się już zmieściła (patrz wyżej).
 
 **Watchdog + przycisk Restart** (patrz §8) dołożyły **+252 B** do wszystkich wariantów z
 `EthModule` (+46 B sam watchdog, wszystkie warianty; +206 B HTML przycisku Restart, tylko
@@ -305,15 +308,37 @@ lator NIE scala automatycznie różnych literałów `F()`, nawet jeśli mają ws
 Efekt netto: domyślny build ma teraz **większy zapas niż przed dodaniem watchdoga/Restart**
 (246 B vs pierwotne 4 B).
 
+**Przegląd bugów (2026-07-29)** — dogłębny przegląd `main.ino` znalazł i naprawił 6 realnych
+błędów: (1) `OTRSP_parse()` — `AUX1n`/`AUX2n` maskowało wartość `& 15` (0-15), ale nigdy nie
+walidowało jej względem faktycznego zakresu anten (0-6, lub 0-7 z `BCD_INPUT`) przed zapisem do
+`port[idx][1]` — realny OOB-read w `antName()`, osiągalny przez sieć/port szeregowy; naprawione
+identyczną walidacją jak już istniała w handlerze WWW; (2) odczyt żądania WWW nie miał timeoutu —
+klient, który otworzył połączenie i nic nie wysłał, blokował `loop()` w nieskończoność; dodano
+limit 2000 ms; (3) `e`, `enc0Pos` i `Timeout[5][2]` — zmienne czytane w `loop()` a zapisywane w
+ISR enkodera (`encI()`) nie były `volatile`; `Timeout` (typ `unsigned long`, 4 B) był dodatkowo
+podatny na "torn read" przy przerwaniu w trakcie odczytu; (4) globalny `String Note` w `show()`
+(wołane co ~100 ms) zastąpiony stałobuforowym `char noteBuf[]` na stosie — unika fragmentacji
+sterty na urządzeniu z 2 KB RAM i długim czasem pracy; **niespodziewany efekt uboczny: odzyskano
+~660 B flash**, bo metody `String` (concat/assign/alokacja) ciągną za sobą sporo kodu, nie tylko
+RAM; (5) `enc2()` używało globalnego `e` zamiast przekazanego parametru `count` — literówka, która
+przy pewnych wywołaniach czytała nieaktualną wartość enkodera; (6) `reqBuf` dla wariantu
+`WWW_EEPROM_NAMES` miało 48 B, za mało dla najdłuższego możliwego żądania (edycja pola sieciowego
+z pełną nazwą) — zwiększone do 56 B. Efekt na domyślnym buildzie: **Flash 97,0 %** (29810 B) —
+**zapas ~910 B** (patrz też §9 niżej) — głównie dzięki (4); (1)/(2)/(6) kosztowały łącznie kilka
+do kilkudziesięciu bajtów, (3) i (5) nie mają wpływu na rozmiar. Przy tym zapasie kombinacja
+`EthModule`+`OTRSP`+`OTRSP_TCP` (wszystkie trzy naraz) **technicznie już by się zmieściła**
+(zmierzone: 97,3 %, zapas ~824 B) — `#error` blokujący tę kombinację został **celowo** zostawiony
+bez zmian, treść komunikatu ("brakuje ~116 B") jest już nieaktualna, ale odblokowanie 6. wariantu
+to osobna decyzja architektoniczna, nie część tego przeglądu.
+
 **Strona WWW bez OTRSP** (`EthModule` samo, static IP edytowalna przez WWW) — bezpieczniejszy
-wybór z dużym zapasem, jeśli OTRSP-TCP nie jest potrzebne: **Flash 96,2 %** (29552 B) /
-**RAM 48,3 %** (989 B), ~1,1 KB wolne. **`EthModule` + `OTRSP`** (USB, bez TCP): **Flash 97,9 %**
-(30070 B) / RAM 51,5 % (1055 B) — zapas ~650 B. Build z wszystkim WŁ. (BCD+PTT+strona WWW)
-**już się nie mieści** niezależnie od wariantu OTRSP.
+wybór z dużym zapasem, jeśli OTRSP-TCP nie jest potrzebne: **Flash 93,9 %** (28856 B), ~1,8 KB
+wolne. **`EthModule` + `OTRSP`** (USB, bez TCP): **Flash 95,4 %** (29316 B) — zapas ~1,4 KB.
+Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści** niezależnie od wariantu OTRSP.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
-sam Ethernet. Bez WWW (watchdog dolożył tu tylko +46 B): `OTRSP` po USB (bez TCP, bez
-Ethernetu) = **38,0 %** (11680 B); + `OTRSP_TCP` (USB+TCP równolegle) = **70,5 %** (21652 B).
+sam Ethernet. Bez WWW: `OTRSP` po USB (bez TCP, bez Ethernetu) = **33,6 %** (10322 B);
++ `OTRSP_TCP` (USB+TCP równolegle) = **68,0 %** (20900 B).
 
 *Historia (przed usunięciem DHCP z projektu):* DHCP kosztowało dodatkowo ~3,8 KB
 (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne osobno od reszty biblioteki). Strona WWW + DHCP
@@ -363,14 +388,15 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
 - **Pięć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) **domyślny** —
   `#define EthModule` + `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP,
-  **99,7% — zapas ~90 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
+  **97,0% — zapas ~910 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
   każdej zmianie w WWW/CSS/OTRSP_TCP/sieci, bo trafia do każdego kto skompiluje projekt bez
   ruszania `#define`; (2) `#define EthModule` + `//#define OTRSP` + `//#define OTRSP_TCP`
-  (strona WWW bez OTRSP, static IP, 96,7%, zapas ~1 KB — bezpieczniejsza alternatywa); (3)
-  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 98,4%);
-  (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 38,0%); (5) `#define OTRSP`
-  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 70,5%).
+  (strona WWW bez OTRSP, static IP, 93,9%, zapas ~1,8 KB — bezpieczniejsza alternatywa); (3)
+  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 95,4%);
+  (4) `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 33,6%); (5) `#define OTRSP`
+  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 68,0%).
   Kombinacja `EthModule` + `OTRSP` + `OTRSP_TCP` (wszystkie trzy naraz) **musi** dać `#error`
-  w compile-time (celowe zabezpieczenie — brakuje ~116 B, patrz §9; nie regresja).
+  w compile-time (celowe zabezpieczenie, patrz §9 — treść komunikatu jest nieaktualna po
+  przeglądzie bugów 2026-07-29, ale blokada zostaje jako świadoma decyzja, nie regresja).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
   stacji (brak sprzętu w CI).
