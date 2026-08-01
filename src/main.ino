@@ -193,14 +193,12 @@ const char siteDefault[] PROGMEM = "SQ9FK";
 //====================================================================
 // SQ9FK: OTRSP (USB) i OTRSP_TCP sa NIEZALEZNE - kazdy moze byc wlaczony osobno (wspolny parser
 // OTRSP_parse() kompiluje sie, gdy zdefiniowany jest ktorykolwiek z nich). DOMYSLNY BUILD to
-// EthModule+OTRSP_TCP (strona WWW + OTRSP po TCP, np. dla N1MM+) - 100,0% flash, zapas ZALEDWIE
-// ~4 B (patrz docs/DESIGN.md) - kazda zmiana w kodzie WWW/CSS/OTRSP_TCP MUSI byc zbudowana
+// EthModule+OTRSP_TCP (strona WWW + OTRSP po TCP, np. dla N1MM+) - 97,0% flash, zapas ~910 B
+// (patrz docs/DESIGN.md) - kazda zmiana w kodzie WWW/CSS/OTRSP_TCP MUSI byc zbudowana
 // NAJPIERW na tym wariancie, bo najlatwiej go zepsuc. Samo OTRSP (USB) z EthModule tez sie
-// miesci (98,7%, zapas ~410 B). WSZYSTKIE TRZY naraz (EthModule+OTRSP+OTRSP_TCP) NIE miesza sie
-// (brakuje ~116 B) - to jedyna blokowana kombinacja.
-#if defined(OTRSP_TCP) && defined(EthModule) && defined(OTRSP)
-  #error "EthModule + OTRSP + OTRSP_TCP naraz nie miesci sie w flash ATmega328 (brakuje ~116 B). Wybierz WWW+OTRSP (USB) albo WWW+OTRSP_TCP - nie oba kanaly naraz z WWW."
-#endif
+// miesci (95,4%, zapas ~1,4 KB). WSZYSTKIE TRZY naraz (EthModule+OTRSP+OTRSP_TCP) od 2026-07-29
+// (po odzyskaniu ~660 B flash przy przegladzie bugow) TEZ sie miesci (97,3%, zapas ~824 B) -
+// wczesniej byla tu blokada #error (brakowalo ~116 B przed tym przegladem), odblokowano.
 // SQ9FK: sprzet sieciowy (W5500/DHCP) potrzebny zarowno dla strony WWW (EthModule) jak i dla
 // surowego TCP OTRSP (OTRSP_TCP) - bring-up jest wspolny, tylko serwer/tresc na porcie sa inne.
 #if defined(EthModule) || defined(OTRSP_TCP)

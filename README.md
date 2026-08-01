@@ -67,11 +67,10 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   kończy CR (`\r`), zgodnie ze specyfikacją. Kanał USB (`OTRSP`, domyślnie **wyłączony**) i surowe
   gniazdo TCP (`OTRSP_TCP`, domyślny port 4534, domyślnie **włączone**) są **niezależne** — można
   włączyć jeden, drugi, albo oba naraz; sam parser komend jest wspólny
-  (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii. Każdy z nich **osobno**
-  mieści się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~650 B, `OTRSP_TCP`
-  (gniazdo TCP, **domyślny build**) z zapasem ~246 B (patrz uwaga niżej). **Oba naraz**
-  (`OTRSP`+`OTRSP_TCP`) ze stroną WWW **nie mieszczą się** (brakuje ~116 B) — to jedyna blokowana
-  kombinacja.
+  (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii. Każdy z nich, oraz
+  **oba naraz**, mieszczą się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~1,4 KB,
+  `OTRSP_TCP` (gniazdo TCP, **domyślny build**) z zapasem ~910 B, oba naraz z zapasem ~824 B
+  (patrz uwaga niżej) — żadna kombinacja nie jest już blokowana.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
 - **Watchdog** (`<avr/wdt.h>`, zawsze włączony) — jeśli `loop()` się zawiesi (na WWW, TCP OTRSP,
@@ -98,6 +97,10 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   poprawiając zapas domyślnego buildu); (5) `enc2()` używa własnego parametru zamiast globalnej
   zmiennej; (6) powiększony bufor żądania WWW (56 B zamiast 48 B — mocno zakodowana 11-znakowa
   nazwa anteny mogła się wcześniej obcinać w połowie).
+- **Odblokowany 6. wariant (2026-08-01)** — strona WWW + OTRSP po USB **i** po TCP jednocześnie
+  (`EthModule`+`OTRSP`+`OTRSP_TCP`) była dotąd blokowana przez `#error` (brakowało ~116 B); po
+  odzyskaniu flash w przeglądzie z 2026-07-29 kombinacja faktycznie się mieści (97,3%/29896 B,
+  zapas ~824 B) — `#error` usunięty, wszystkie sześć wariantów jest teraz dostępnych.
 - **Biblioteka Ethernet: oficjalna `arduino-libraries/Ethernet`** (była `adafruit/Ethernet2` —
   przestarzała/nieutrzymywana). Kosztuje więcej flash niż Ethernet2 (obsługa W5100/W5200/W5500
   z auto-detekcją chipu w runtime, niewyłączalna `#define`m). **DHCP usunięte z projektu** —
@@ -117,7 +120,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
 | `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
 | `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | **WŁ.**   | surowy TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~4 B) |
+| `OTRSP_TCP`     | **WŁ.**   | surowy TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~910 B) |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
 | `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW (zawsze static IP, bez DHCP) |
@@ -194,27 +197,28 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > sam Ethernet, zajmuje większość budżetu.
 >
 > `OTRSP` (USB) i `OTRSP_TCP` (gniazdo TCP) są **niezależne** — każdy może być włączony osobno,
-> i każdy z osobna mieści się razem ze stroną WWW (`EthModule`). Wyklucza się rozmiarowo tylko
-> **oba naraz razem z WWW** (patrz `#error` w `src/main.ino`). Pięć wariantów:
+> razem albo osobno, ze stroną WWW (`EthModule`) albo bez niej. Od 2026-07-29 (po przeglądzie
+> bugów i odzyskaniu ~660 B flash) **żadna kombinacja już nie jest blokowana** — dawny `#error`
+> dla `EthModule`+`OTRSP`+`OTRSP_TCP` naraz (brakowało ~116 B) został usunięty, bo ta kombinacja
+> faktycznie się mieści. Sześć wariantów:
 > - **Strona WWW + OTRSP po surowym TCP** (**obecnie, domyślne**): `#define EthModule`,
 >   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **97,0%** (29810 B), RAM **51,8%** (1061 B)
->   — zapas ~910 B. Wciąż najciaśniejszy z pięciu wariantów — buduj go najpierw przy każdej
->   zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
+>   — zapas ~910 B. Wciąż najciaśniejszy z domyślnie używanych wariantów — buduj go najpierw przy
+>   każdej zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
 > - **Strona WWW, static IP, bez OTRSP**: `#define EthModule`, `//#define OTRSP`,
 >   `//#define OTRSP_TCP` → Flash **93,9%** (28856 B), RAM **47,6%** (975 B) — zapas ~1,8 KB,
->   bezpieczniejszy wybór jeśli OTRSP-TCP nie jest potrzebne.
+>   bezpieczniejszy wybór jeśli OTRSP nie jest potrzebne.
 > - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash **95,4%** (29316 B), RAM **50,8%** (1041 B) — zapas ~1,4 KB
+> - **Strona WWW + OTRSP po USB i po TCP jednocześnie**: `#define EthModule`, `#define OTRSP`,
+>   `#define OTRSP_TCP` → Flash **97,3%** (29896 B), RAM **55,0%** (1127 B) — zapas ~824 B,
+>   **najciaśniejszy ze wszystkich sześciu wariantów** (odblokowany 2026-08-01); jeśli oba kanały
+>   OTRSP naraz nie są naprawdę potrzebne, wybierz jeden z dwóch wariantów wyżej — mają wyraźnie
+>   więcej zapasu.
 > - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
 >   → Flash **33,6%** (10322 B), RAM **36,1%** (739 B)
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
 >   `#define OTRSP`, `#define OTRSP_TCP` → Flash **68,0%** (20900 B), RAM **53,6%** (1098 B)
->
-> Strona WWW + **oba** kanały OTRSP naraz (`EthModule`+`OTRSP`+`OTRSP_TCP`) **nadal jest
-> blokowana** przez `#error` w `src/main.ino` — ale po odzyskaniu flash (patrz niżej) **już by się
-> zmieściła** (zmierzone: 97,3%/29896 B, zapas ~824 B, zamiast wcześniejszego niedoboru ~116 B).
-> `#error` i jego treść ("brakuje ~116 B") są celowo **zostawione bez zmian** — decyzja czy
-> odblokować tę kombinację jako 6. wariant to osobny temat, nie część tej poprawki.
 
 ### Optymalizacje rozmiaru (zastosowane)
 
