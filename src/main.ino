@@ -696,13 +696,21 @@ void loop() {
           //   /?NS={nazwa}     - edycja nazwy stacji (topbar)        (WWW_EEPROM_NAMES)
           //   /?N{I|G|M|D}={a.b.c.d} - edycja IP/gateway/maski/DNS   (WWW_EEPROM_NAMES)
           //   /?F{s}{0|1}      - zalaczenie/wylaczenie Flex s=1/2 (GPA7/GPB7)
+          // SQ9FK: kazde pole Settings ma WLASNY formularz/submit (parser czyta tylko JEDEN
+          // parametr na zadanie, patrz reqBuf[6..]) - zapisanie IP/gateway/maski/DNS wymaga wiec
+          // do 4 klikniec OK z rzedu. Zeby uzytkownik nie musial za kazdym razem ponownie
+          // rozwijac karty, po zapisaniu KTOREGOKOLWIEK pola Settings odpowiedz renderuje
+          // <details open> zamiast domyslnie zwinietej.
+          bool settingsOpen = false;
 #if defined(WWW_EEPROM_NAMES)
           if (reqBuf[6] == 'N' && reqBuf[7] >= '1' && reqBuf[7] <= '6') {
             parseName(reqBuf + 9, antRAM[reqBuf[7] - '0']);   // edycja nazwy anteny + zapis EEPROM
             saveAntNames();
+            settingsOpen = true;
           } else if (reqBuf[6] == 'N' && reqBuf[7] == 'S') {
             parseName(reqBuf + 9, siteRAM);                   // edycja nazwy stacji + zapis EEPROM
             saveAntNames();
+            settingsOpen = true;
           } else if (reqBuf[6] == 'N' && memchr("IGMD", reqBuf[7], 4)) {
             // SQ9FK: edycja IP/gateway/maski/DNS - parsuj do zmiennej tymczasowej, zapisz tylko
             // gdy poprawny adres (fromString==true), zeby zle wejscie nie zepsulo zywej konfiguracji.
@@ -713,6 +721,7 @@ void loop() {
                 break;
               }
             }
+            settingsOpen = true;
           } else
 #endif
           if (reqBuf[6] == 'F' && (reqBuf[7] == '1' || reqBuf[7] == '2') &&
@@ -838,7 +847,9 @@ void loop() {
           }
           out.println(F("</div></section>"));
           // SQ9FK: Settings (zwijane <details>) - nazwa stacji + nazwy anten + ukryte napiecie
-          out.println(F("<details class=\"card\"><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
+          out.print(F("<details class=\"card\""));
+          if (settingsOpen) out.print(F(" open"));
+          out.println(F("><summary><h2>Settings</h2><span class=\"chev\">&#9662;</span></summary>"));
 #if defined(WWW_EEPROM_NAMES)
           // SQ9FK: nazwa stacji -> /?NS={nazwa}; wspolne fragmenty (nmOpen/nmMid/nmLen11/nmClose)
           // patrz deklaracja przy POWER_SVG - ten sam uklad co petla anten i petla sieci nizej.
