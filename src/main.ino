@@ -114,6 +114,7 @@ const char siteDefault[] PROGMEM = "SQ9FK";
   char siteRAM[ANT_MAXLEN + 1];              // SQ9FK: edytowalna nazwa stacji (topbar)
   static const char* antName(byte idx) { return antRAM[idx]; }
   static const char* siteName()        { return siteRAM; }
+  static byte siteNameLen()            { return strlen(siteRAM); }
 
   static void loadAntNames() {
     strcpy_P(antRAM[0], (PGM_P)pgm_read_word(&antDefault[0]));  // OFF - staly (indeks 0, wybieralny zawsze)
@@ -171,6 +172,7 @@ const char siteDefault[] PROGMEM = "SQ9FK";
   static const __FlashStringHelper* siteName() {
     return (const __FlashStringHelper*)siteDefault;
   }
+  static byte siteNameLen() { return strlen_P(siteDefault); }
 #endif
 #define Inputs      6      // number of antenna used ** not implemented ** //SQ9FK was 6
 #define Ports       2      // number of - IN/OUT pair devices and LCD lines (support from 2 to 4)
@@ -475,8 +477,11 @@ void setup()
     Wire.endTransmission();
   }
   lcd.begin(16, Ports);
-  lcd.setCursor(0, Ports / 2 - 1);
-  lcd.print(siteName());   // SQ9FK: nazwa stacji (edytowalna przez WWW/EEPROM) zamiast "SQ9FK" na sztywno
+  // SQ9FK: nazwa stacji wysrodkowana na 16-znakowej linii (dlugosc zmienna - edytowalna przez
+  // WWW/EEPROM), zamiast na sztywno w kolumnie 0.
+  byte siteCol = (siteNameLen() < LCDculumn) ? (LCDculumn - siteNameLen()) / 2 : 0;
+  lcd.setCursor(siteCol, Ports / 2 - 1);
+  lcd.print(siteName());
   lcd.setCursor(1, Ports / 2);
   lcd.print(Inputs);
   lcd.setCursor(2, Ports / 2);
