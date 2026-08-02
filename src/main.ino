@@ -217,8 +217,8 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
   // IP zawsze statyczne (bez DHCP) - dostosuj ip/gateway/subnet ponizej pod siec docelowa
   // (lub edytuj po flashowaniu przez WWW+EEPROM, patrz WWW_EEPROM_NAMES nizej).
   byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xEE};
-  IPAddress ip(192, 168, 5, 45);         // IP
-  IPAddress gateway(192, 168, 5, 254);    // GATE
+  IPAddress ip(10, 10, 10, 1);           // IP
+  IPAddress gateway(0, 0, 0, 0);          // GATE (brak bramy - siec izolowana)
   IPAddress subnet(255, 255, 255, 0);     // MASK
   IPAddress myDns(8, 8, 8, 8);            // DNS (google pub)
 #if defined(WWW_EEPROM_NAMES)
