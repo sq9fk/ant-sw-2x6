@@ -24,10 +24,12 @@ zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
   `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
-  WWW_EEPROM_NAMES WŁ.** — Flash **97,0%** (29810 B) / RAM **51,8%** (1061 B), **zapas ~910 B**
+  WWW_EEPROM_NAMES WŁ.** — Flash **97,4%** (29912 B) / RAM **51,8%** (1061 B), **zapas ~808 B**
   (poprawilo sie znaczaco po usunieciu `String` z `show()` przy przegladzie bugow 2026-07-29 -
-  wczesniej ~90 B). Jest domyslny i ma DRUGI najmniejszy zapas z szesciu wariantow (najciasniejszy
-  to `EthModule`+`OTRSP`+`OTRSP_TCP` naraz, ~824 B, patrz nizej) — KAZDA zmiana we wspoldzielonym
+  wczesniej ~90 B; -102 B po 2026-08-02: wysrodkowanie nazwy stacji na LCD + JS wstrzymujacy
+  auto-odswiezanie przy otwartym Settings, patrz nizej). Jest domyslny i ma DRUGI najmniejszy
+  zapas z szesciu wariantow (najciasniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP` naraz, ~726 B,
+  patrz nizej) — KAZDA zmiana we wspoldzielonym
   kodzie (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na OBU tych
   wariantach NAJPIERW.
   Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
@@ -48,21 +50,33 @@ zawsze.
   **Szesc wariantow** (od 2026-08-01 ZADNA kombinacja nie jest juz blokowana — dawny `#error`
   dla `EthModule`+`OTRSP`+`OTRSP_TCP` naraz (brakowalo ~116 B) zostal USUNIETY po przegladzie
   bugow 2026-07-29, bo odzyskane ~660 B z `String` sprawilo, ze ta kombinacja faktycznie sie
-  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **97,0%**
-  (29810 B) **— zapas ~910 B**; (2) `EthModule` — strona WWW bez OTRSP, 93,9% (28856 B, zapas
-  ~1,8 KB, bezpieczniejszy jesli OTRSP niepotrzebne); (3) `EthModule`+`OTRSP` — strona WWW +
-  OTRSP po USB, **95,4%** (29316 B, zapas ~1,4 KB); (4) `EthModule`+`OTRSP`+`OTRSP_TCP` — strona
-  WWW + OTRSP po USB **i** TCP jednoczesnie, **97,3%** (29896 B, zapas ~824 B) —
+  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **97,4%**
+  (29912 B) **— zapas ~808 B**; (2) `EthModule` — strona WWW bez OTRSP, 94,3% (28958 B, zapas
+  ~1,7 KB, bezpieczniejszy jesli OTRSP niepotrzebne); (3) `EthModule`+`OTRSP` — strona WWW +
+  OTRSP po USB, **95,8%** (29420 B, zapas ~1,3 KB); (4) `EthModule`+`OTRSP`+`OTRSP_TCP` — strona
+  WWW + OTRSP po USB **i** TCP jednoczesnie, **97,6%** (29994 B, zapas ~726 B) —
   NAJCIASNIEJSZY ze wszystkich szesciu, buduj i mierz go PRZED merge kazdej zmiany we
   wspoldzielonym kodzie (WWW/OTRSP_parse/siec), obok wariantu (1); (5) `OTRSP` — OTRSP tylko po
-  USB, bez Ethernetu, 33,6% (10322 B); (6) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
-  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **68,0%** (20900 B).
+  USB, bez Ethernetu, 33,7% (10356 B); (6) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i** surowym TCP
+  (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **68,1%** (20928 B).
   Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w `EthernetClient`
   (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna) to koszt JUZ
   OBECNY w kazdym buildzie z `EthernetClient` (nawet w najlzejszym WWW-bez-OTRSP) — nie jest to
   specyficzne dla `OTRSP_TCP`. Etykiety pol w Settings (`.nm b`) maja `flex:0 0 4.3rem` (nie
   `min-width`) - stala szerokosc, zeby input zawsze zaczynal sie w tym samym miejscu
   niezaleznie od dlugosci etykiety ("Gateway" vs "IP").
+  **LCD splash (2026-08-02):** nazwa stacji byla drukowana od kolumny 0 (z boku dla krotszych
+  nazw) - dodano `siteNameLen()` (strlen/strlen_P zaleznie od `WWW_EEPROM_NAMES`) i wyliczenie
+  kolumny startowej `(LCDculumn - dlugosc) / 2`, zeby zawsze byla wysrodkowana na 16-znakowej
+  linii.
+  **Auto-odswiezanie strony (2026-08-02):** dawny `<meta http-equiv="refresh" content="10;...">`
+  przeladowywal strone BEZWARUNKOWO co 10 s - zwijal rozwiniete Settings (`<details>`, stan tylko
+  w DOM, NIE zapisany po stronie urzadzenia) w trakcie edycji, zanim uzytkownik zdazyl zapisac.
+  Zastapione inline `<script>` (funkcja `r()`): przed przeladowaniem sprawdza
+  `document.querySelector('[open]')`, jesli cokolwiek jest rozwiniete - odracza sprawdzenie o 2 s
+  (petla `setTimeout`), w przeciwnym razie `location.href` jak wczesniej. Pierwszy JS w tym
+  projekcie (reszta strony to czysty HTML/CSS + GET) - uzyty wylacznie bo natywny `<details>` nie
+  ma zadnego innego mechanizmu przetrwania przeladowania strony.
 - **Watchdog (`<avr/wdt.h>`, zawsze wlaczony, wszystkie warianty):** `MCUSR=0; wdt_disable();`
   na SAMYM POCZATKU `setup()` (niektore bootloadery zostawiaja WDT wlaczony z krotkim timeoutem
   po poprzednim resecie - bez tego byla by petla resetow). `wdt_enable(WDTO_8S)` na SAMYM KONCU
@@ -216,9 +230,9 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
   `#ifdef` nie uległy rozjechaniu. **Sześć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
   — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` to
-  **domyślny build** i ma zapas ~910 B — buduj go PIERWSZY przy każdej zmianie, bo to on trafi do
+  **domyślny build** i ma zapas ~808 B — buduj go PIERWSZY przy każdej zmianie, bo to on trafi do
   każdego, kto skompiluje projekt bez modyfikacji `#define`; drugi w kolejności to
-  `EthModule`+`OTRSP`+`OTRSP_TCP` (najciaśniejszy ze wszystkich, zapas ~824 B).
+  `EthModule`+`OTRSP`+`OTRSP_TCP` (najciaśniejszy ze wszystkich, zapas ~726 B).
 - **Wygląd interfejsu WWW i protokół OTRSP** można podejrzeć bez sprzętu: `tools/websim.html`
   (odtwarza HTML/CSS firmware + symuluje `OTRSP_parse()` — dwa niezależne monitory USB/TCP,
   TX/RX kolorowane) lub `python tools/serve.py`. Przy zmianie HTML strony **lub** logiki

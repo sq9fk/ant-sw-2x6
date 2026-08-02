@@ -669,9 +669,14 @@ void loop() {
           out.print(F(" "));
           out.print(siteName());
           out.println(F(" - Antenna switch</title>"));
-          out.print(F("<meta http-equiv=\"refresh\" content=\"10;url=http://"));
+          // SQ9FK: dawny <meta refresh> przeladowywal strone co 10 s bezwarunkowo - zwijal
+          // rozwiniete Settings (<details>) w trakcie edycji, zanim uzytkownik zdazyl zapisac.
+          // Zastapione JS-em: odswieza po 10 s TYLKO gdy zaden <details> nie jest otwarty,
+          // w przeciwnym razie odracza sprawdzenie o 2 s (petla, az uzytkownik zwinie Settings).
+          out.print(F("<script>function r(){document.querySelector('[open]')?setTimeout(r,2000)"
+                       ":location.href='http://"));
           out.print(Ethernet.localIP());
-          out.println(F("\">"));
+          out.println(F("'}setTimeout(r,10000)</script>"));
           out.print((const __FlashStringHelper*)HTTP_HEAD2);
           // SQ9FK: topbar - kropka statusu (czerwona gdy napiecie poza 10-15 V) + nazwa stacji
           float vv = volt(analogRead(A3));
