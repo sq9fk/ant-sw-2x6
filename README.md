@@ -47,7 +47,11 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   statusy sekcji przy nagłówku „Anteny", legenda „Opis anten", zwijana karta **Settings**.
   **Responsywny (mobile-first)** — cele dotykowe min. 44×44 px poniżej 520 px, wyśrodkowana ikona
   Flex, siatka przycisków TRX zawsze wyrównana do lewej krawędzi karty niezależnie od liczby
-  zawiniętych linii (etykieta TRX na własnym pełnym wierszu na wąskich ekranach).
+  zawiniętych linii (etykieta TRX na własnym pełnym wierszu na wąskich ekranach). **Siatka anten
+  na mobile (2026-08-02)** — wiersz zawija się deterministycznie na **4+4** (`-,1,2,3` / `4,5,6,
+  power`), oba wiersze wypełniają całą szerokość karty równymi przyciskami (`flex:1 1 0`); ikona
+  power już nie „ucieka" auto-marginesem na prawy kraniec, gdy zostanie sama w krótkim,
+  zawiniętym wierszu (na desktopie bez zmian — nadal przy prawej krawędzi w jednym wierszu).
 - **Edycja nazw przez WWW** (`WWW_EEPROM_NAMES`, karta Settings) — **nazwa stacji** (topbar) oraz
   nazwy anten 1–6, zapisywane w EEPROM (trwałe), z limitem długości 11 znaków.
 - **Konfiguracja sieciowa edytowalna przez WWW** (karta Settings) — **IP, brama, maska, DNS**
@@ -79,7 +83,7 @@ W stosunku do oryginału OK1HRA (rev 0.3) wprowadzono:
   włączyć jeden, drugi, albo oba naraz; sam parser komend jest wspólny
   (`OTRSP_parse(cmd, Print&)`), każdy kanał ma własny, niezależny bufor linii. Każdy z nich, oraz
   **oba naraz**, mieszczą się razem ze stroną WWW (`EthModule`) — `OTRSP` (USB) z zapasem ~1,1 KB,
-  `OTRSP_TCP` (gniazdo TCP, **domyślny build**) z zapasem ~638 B, oba naraz z zapasem ~552 B
+  `OTRSP_TCP` (gniazdo TCP, **domyślny build**) z zapasem ~398 B, oba naraz z zapasem ~346 B
   (patrz uwaga niżej) — żadna kombinacja nie jest już blokowana.
 - **Automatyka BCD i blokowanie przez PTT** — dostępne jako opcje (`BCD_INPUT`, `PTT_BLOCKING`),
   domyślnie wyłączone (patrz [Funkcje opcjonalne](#funkcje-opcjonalne-sq9fk)).
@@ -139,7 +143,7 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `Ports`         | 2         | liczba par IN/OUT i linii LCD (wspiera 2–4)                  |
 | `inputHigh`     | **WŁ.**   | poziom aktywny wejść (HIGH)                                  |
 | `OTRSP`         | WYŁ.      | włącza sterowanie OTRSP po porcie szeregowym                |
-| `OTRSP_TCP`     | **WŁ.**   | surowy TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~638 B) |
+| `OTRSP_TCP`     | **WŁ.**   | surowy TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~398 B) |
 | `OTRSP_TCP_PORT`| 4534      | port surowego TCP dla OTRSP                                  |
 | `SERBAUD`       | 9600      | prędkość portu szeregowego                                   |
 | `EthModule`     | **WŁ.**   | włącza moduł Ethernet + interfejs WWW (zawsze static IP, bez DHCP) |
@@ -152,8 +156,23 @@ Settings) i zapisywane w EEPROM (patrz niżej).
 | `BCD_INPUT`     | WYŁ.      | automatyczny wybór anteny z BCD radia (wejścia MCP IN); wyłączony = tryb wyłącznie ręczny (WWW/enkoder), bez przełącznika Manual/BCD |
 | `PTT_BLOCKING`  | WYŁ.      | odczyt PTT + blokada przełączania podczas TX + plakietka PTT; wyłączony zgodnie ze zmianą HW (gniazda PTT jako wyjścia) |
 
-> **Wykrywanie kolizji** między TRX (blokada tej samej anteny, para 4↔5 GXP) działa
-> **niezależnie** od `PTT_BLOCKING` — pozostaje aktywne.
+> **Wykrywanie kolizji** między TRX (blokada tej samej anteny, ≠ OFF) działa **niezależnie**
+> od `PTT_BLOCKING` — pozostaje aktywne. Blokada pary 4↔5 (GXP11) z projektu OK1HRA została
+> usunięta — poz. 4 i 5 to teraz w pełni niezależne anteny.
+>
+> **Atrybucja kolizji (2026-08-03)** — gdy dwa TRX zażądają tej samej anteny, na czerwono
+> podświetla się **tylko ten TRX, który przełączył się jako drugi** (ten pierwszy, już
+> ustabilizowany, zostaje bez zmian) — niezależnie od numeru TRX. Górny chip statusu (mały
+> kwadrat z numerem TRX) pokazuje wtedy **„OFF"** zamiast nazwy żądanej anteny, bo dokładnie tak
+> wygląda stan przekaźników (wyjście zostaje wymuszone na OFF). Żądanie zablokowanego TRX
+> **nie ginie** — jeśli TRX, który zajmuje antenę, ją zwolni (przełączy się gdzie indziej albo na
+> OFF), zablokowany TRX automatycznie ją przejmuje **od razu, bez ponownego klikania i bez
+> odświeżania strony** (poprawka z 2026-08-04 — poprzednio przejęcie działało tylko wtedy, gdy
+> zwalniający TRX miał niższy numer niż zablokowany; w drugą stronę zablokowany TRX zostawał
+> zawieszony na OFF aż do ręcznego odświeżenia, mimo że antena była już fizycznie wolna).
+> Naprawiono też sytuację, w której strona WWW pokazywała kolor kolizji **sprzed** dopiero co
+> wykonanej zmiany (trzeba było ręcznie odświeżyć) oraz fałszywe kolizje przy **OFF+OFF**
+> (dwa TRX ustawione na OFF nigdy nie kolidują).
 
 ## Struktura repozytorium
 
@@ -201,11 +220,12 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 
 > **Domyślna konfiguracja: Ethernet WŁ. + OTRSP po TCP WŁ.** (strona WWW + gniazdo TCP dla
 > OTRSP, np. dla N1MM+, port 4534 — static IP). Build zweryfikowany: `pio run -e nanoatmega328`
-> → **SUCCESS**, bez ostrzeżeń (Flash **97,9%** / 30082 B — **zapas ~638 B**, RAM **55,0%** / 1127 B
+> → **SUCCESS**, bez ostrzeżeń (Flash **98,7%** / 30322 B — **zapas ~398 B**, RAM **55,0%** / 1127 B
 > — domyślne flagi: BCD/PTT wył., nazwy WWW wł., konfiguracja sieciowa edytowalna wł. (WWW **i**
 > Serial, patrz „Awaryjna edycja sieci przez Serial" wyżej), watchdog wł., endpointy `/?J`+`/?K`
 > dla `rotator_wifi_bridge` wł.). Zapas znacząco się poprawił po usunięciu `String` z `show()`
-> (patrz niżej) — wcześniej było ~246 B.
+> (patrz niżej) — wcześniej było ~246 B; od tego czasu zjadły go poprawki UX (siatka mobile,
+> atrybucja kolizji — patrz wyżej).
 > Wariant **BCD+PTT razem z Ethernetem już się nie mieści** — te opcje bez `EthModule`.
 >
 > ⚠️ **Oficjalna biblioteka Ethernet kosztuje więcej flash niż Ethernet2** (obsługa
@@ -220,28 +240,27 @@ zastąpiła przestarzałą `adafruit/Ethernet2`).
 > razem albo osobno, ze stroną WWW (`EthModule`) albo bez niej. Od 2026-07-29 (po przeglądzie
 > bugów i odzyskaniu ~660 B flash) **żadna kombinacja już nie jest blokowana** — dawny `#error`
 > dla `EthModule`+`OTRSP`+`OTRSP_TCP` naraz (brakowało ~116 B) został usunięty, bo ta kombinacja
-> faktycznie się mieści. Sześć wariantów (figury poniżej z 2026-08-02, po wyśrodkowaniu nazwy
-> stacji na LCD, zamianie `<meta refresh>` na JS wstrzymujący odświeżanie przy otwartym Settings
-> i dodaniu awaryjnej edycji sieci przez Serial):
+> faktycznie się mieści. Sześć wariantów (figury poniżej z 2026-08-03, po poprawkach siatki
+> mobile i atrybucji kolizji — patrz wyżej):
 > - **Strona WWW + OTRSP po surowym TCP** (**obecnie, domyślne**): `#define EthModule`,
->   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **97,9%** (30082 B), RAM **55,0%** (1127 B)
->   — zapas ~638 B. Wciąż najciaśniejszy z domyślnie używanych wariantów — buduj go najpierw przy
+>   `//#define OTRSP`, `#define OTRSP_TCP` → Flash **98,7%** (30322 B), RAM **55,0%** (1127 B)
+>   — zapas ~398 B. Wciąż najciaśniejszy z domyślnie używanych wariantów — buduj go najpierw przy
 >   każdej zmianie we współdzielonym kodzie (patrz `docs/DESIGN.md` §9/§11).
 > - **Strona WWW, static IP, bez OTRSP**: `#define EthModule`, `//#define OTRSP`,
->   `//#define OTRSP_TCP` → Flash **94,9%** (29146 B), RAM **50,8%** (1041 B) — zapas ~1,5 KB,
+>   `//#define OTRSP_TCP` → Flash **95,7%** (29394 B), RAM **50,8%** (1041 B) — zapas ~1,3 KB,
 >   bezpieczniejszy wybór jeśli OTRSP nie jest potrzebne.
 > - **Strona WWW + OTRSP po USB**: `#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **96,3%** (29570 B), RAM **50,8%** (1041 B) — zapas ~1,1 KB
+>   → Flash **97,1%** (29822 B), RAM **50,8%** (1041 B) — zapas ~898 B
 > - **Strona WWW + OTRSP po USB i po TCP jednocześnie**: `#define EthModule`, `#define OTRSP`,
->   `#define OTRSP_TCP` → Flash **98,2%** (30168 B), RAM **55,0%** (1127 B) — zapas ~552 B,
+>   `#define OTRSP_TCP` → Flash **98,9%** (30374 B), RAM **55,0%** (1127 B) — zapas ~346 B,
 >   **najciaśniejszy ze wszystkich sześciu wariantów** (odblokowany 2026-08-01); jeśli oba kanały
 >   OTRSP naraz nie są naprawdę potrzebne, wybierz jeden z dwóch wariantów wyżej — mają wyraźnie
 >   więcej zapasu.
 > - **OTRSP po USB** (bez strony WWW): `//#define EthModule`, `#define OTRSP`, `//#define OTRSP_TCP`
->   → Flash **33,7%** (10356 B), RAM **36,1%** (739 B) — bez konfiguracji sieciowej (brak
+>   → Flash **33,7%** (10340 B), RAM **36,1%** (739 B) — bez konfiguracji sieciowej (brak
 >   `EthModule`/`OTRSP_TCP`), więc bez komend `N{I|G|M|D}=` po Serial.
 > - **OTRSP po USB + surowy TCP równolegle** (bez strony WWW): `//#define EthModule`,
->   `#define OTRSP`, `#define OTRSP_TCP` → Flash **69,8%** (21436 B), RAM **54,0%** (1106 B)
+>   `#define OTRSP`, `#define OTRSP_TCP` → Flash **69,7%** (21412 B), RAM **54,0%** (1106 B)
 
 ### Optymalizacje rozmiaru (zastosowane)
 

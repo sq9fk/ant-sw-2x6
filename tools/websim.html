@@ -137,18 +137,32 @@ const state = {
   flexOn: [0,0],                   // stan dwoch wyjsc Flex (GPA7/GPB7) - bez nazw
   port: []                        // per-TRX: {sel, err}
 };
-function initPorts(){ state.port = []; for (let i=0;i<4;i++) state.port.push({sel:0, err:0}); }
+function initPorts(){ state.port = []; for (let i=0;i<4;i++) state.port.push({sel:0, err:0, out:0}); }
 initPorts();
 
-// Kolizja: dwa TRX zadaja tej samej anteny (!=0). Blokada 4<->5 usunieta (6 niezaleznych anten).
+// SQ9FK: lustro updateCollisions() z main.ino - kolizja porownuje ZADANIE (sel) TRX i wzgledem
+// juz-ROZSTRZYGNIETEGO WYJSCIA (out) innych TRX, NIE ich zadania - dzieki temu, przy zmianie
+// TYLKO JEDNEGO portu na raz (jak w handleGet()/otrspRespond() - dokladnie jedno wywolanie
+// recalcErr() na klikniecie, tak jak jedno wywolanie updateCollisions() na zadanie WWW),
+// kolizje jest atrybuowana TYLKO TEMU TRX, ktory wlasnie przelaczyl sie na zajeta antene - ten
+// drugi (juz tam byl, output ustabilizowany) zostaje bez zmian. Symetryczne porownanie
+// sel===sel (stara wersja) bledziej oznaczalo oba TRX na czerwono.
+// DWA PRZEBIEGI (lustro main.ino) - w jednym przebiegu TRX o nizszym indeksie widzialby "out"
+// TRX o wyzszym indeksie SPRZED tego wywolania (jeszcze nie przeliczone w tym przebiegu), wiec
+// zablokowany TRX o nizszym indeksie NIE odzyskiwalby anteny w tym samym klikniecu, gdy
+// "wygrany" TRX o wyzszym indeksie ja zwalnia - trzeba by kliknac gdziekolwiek jeszcze raz,
+// zeby sie odswiezylo (w firmware: dopiero po recznym odswiezeniu strony).
 function recalcErr(){
-  for (let i=0;i<state.ports;i++){
-    let c=0; const si=state.port[i].sel;
-    for (let j=0;j<state.ports;j++){
-      if (i===j) continue;
-      if (si!==0 && si===state.port[j].sel) c++;
+  for (let pass=0; pass<2; pass++){
+    for (let i=0;i<state.ports;i++){
+      let c=0; const si=state.port[i].sel;
+      for (let j=0;j<state.ports;j++){
+        if (i===j) continue;
+        if (si!==0 && si===state.port[j].out) c++;
+      }
+      if (c>0){ state.port[i].err=1; state.port[i].out=0; }
+      else { state.port[i].err=0; state.port[i].out=si; }
     }
-    state.port[i].err = c>0 ? 1 : 0;
   }
 }
 
@@ -166,6 +180,7 @@ const DEVICE_CSS =
   '.st .an{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}\n'+
   '.sq{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;border-radius:.35em;background:#2a5d6b;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\n'+
   '.sq.on{background:#f5d33c;color:#162f36}\n'+
+  '.sq.r{background:#d11534;color:#f7f7f7}\n'+
   '.wrap{max-width:760px;margin:0 auto;padding:0 1rem;display:flex;flex-direction:column;gap:1rem}\n'+
   '.card{background:#1a3a42;border-radius:1.1em;padding:1.1rem 1.2rem}\n'+
   'h2{margin:0 0 .8rem;font-size:1rem;font-weight:700}\n'+
@@ -225,8 +240,10 @@ function buildDeviceHTML(){
   // wiersza przycisk-ikona Radio Flex (GPA7/GPB7) bez tekstu (nazwa w title).
   h += '<section class="card"><div class="ahead"><h2>Anteny</h2><div class="astat">';
   for (let i=0;i<P;i++){                            // status sekcji: chip 50/50 (numer + nazwa wlaczonej anteny)
-    const s=state.port[i].sel;
-    h += '<span class="st"><span class="sq'+(s?' on':'')+'">'+(i+1)+'</span><span class="an">'+ant[s].replace(/</g,'&lt;')+'</span></span>';
+    const s=state.port[i].sel, e=state.port[i].err;
+    // SQ9FK: przy kolizji wyjscie tego TRX jest fizycznie OFF - pokaz "OFF" (ant[0]) zamiast
+    // nazwy zadanej anteny, lustro main.ino (antName(port[i][3]==1 ? 0 : port[i][1])).
+    h += '<span class="st"><span class="sq'+(e?' r':(s?' on':''))+'">'+(i+1)+'</span><span class="an">'+ant[e?0:s].replace(/</g,'&lt;')+'</span></span>';
   }
   h += '</div></div><form method="get">\r\n';
   for (let i=0;i<P;i++){
@@ -356,7 +373,7 @@ document.getElementById('reset').onclick=()=>{
 function otrspAuxOut(idx){
   const p = state.port[idx];
   if (!p) return 0;
-  return p.err ? 0 : p.sel;        // kolizja -> wyjscie OFF (0), jak w loop() firmware (port[i+4][1])
+  return p.out;                    // wyjscie po rozstrzygnieciu kolizji, jak port[i+4][1] w firmware
 }
 function otrspRespond(cmd){
   if (cmd.charAt(0) === '?') {

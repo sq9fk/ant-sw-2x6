@@ -24,14 +24,13 @@ zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
   `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
-  WWW_EEPROM_NAMES WŁ.** — Flash **97,9%** (30082 B) / RAM **55,0%** (1127 B), **zapas ~638 B**
+  WWW_EEPROM_NAMES WŁ.** — Flash **98,7%** (30322 B) / RAM **55,0%** (1127 B), **zapas ~398 B**
   (poprawilo sie znaczaco po usunieciu `String` z `show()` przy przegladzie bugow 2026-07-29 -
-  wczesniej ~90 B; net -84 B po 2026-08-02: wysrodkowanie LCD + JS wstrzymujacy auto-odswiezanie
-  + "nie zwijaj Settings po zapisie" kosztowaly razem +186 B, ale awaryjna edycja sieci po
-  Serial odzyskala wiecej dzieki wspoldzielonej `setNetField()` (patrz nizej) - RAM wzrosl
-  o +66 B, bo `in_buf[64]` jest teraz kompilowany takze bez `OTRSP`). Jest domyslny i ma DRUGI
+  wczesniej ~90 B; od tego czasu zjadly go kolejne poprawki UX - siatka mobile 2026-08-02
+  (margin-left/4+4/flex-grow), atrybucja kolizji 2026-08-03 (patrz nizej) - RAM wzrosl o +66 B
+  wczesniej, bo `in_buf[64]` jest teraz kompilowany takze bez `OTRSP`). Jest domyslny i ma DRUGI
   najmniejszy zapas z szesciu wariantow (najciasniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP`
-  naraz, ~552 B, patrz nizej) — KAZDA zmiana we wspoldzielonym
+  naraz, ~346 B, patrz nizej) — KAZDA zmiana we wspoldzielonym
   kodzie (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na OBU tych
   wariantach NAJPIERW.
   Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
@@ -55,17 +54,17 @@ zawsze.
   **Szesc wariantow** (od 2026-08-01 ZADNA kombinacja nie jest juz blokowana — dawny `#error`
   dla `EthModule`+`OTRSP`+`OTRSP_TCP` naraz (brakowalo ~116 B) zostal USUNIETY po przegladzie
   bugow 2026-07-29, bo odzyskane ~660 B z `String` sprawilo, ze ta kombinacja faktycznie sie
-  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **97,9%**
-  (30082 B) **— zapas ~638 B**; (2) `EthModule` — strona WWW bez OTRSP, 94,9% (29146 B, zapas
-  ~1,5 KB, bezpieczniejszy jesli OTRSP niepotrzebne); (3) `EthModule`+`OTRSP` — strona WWW +
-  OTRSP po USB, **96,3%** (29570 B, zapas ~1,1 KB); (4) `EthModule`+`OTRSP`+`OTRSP_TCP` — strona
-  WWW + OTRSP po USB **i** TCP jednoczesnie, **98,2%** (30168 B, zapas ~552 B) —
+  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **98,7%**
+  (30322 B) **— zapas ~398 B**; (2) `EthModule` — strona WWW bez OTRSP, 95,7% (29394 B, zapas
+  ~1,3 KB, bezpieczniejszy jesli OTRSP niepotrzebne); (3) `EthModule`+`OTRSP` — strona WWW +
+  OTRSP po USB, **97,1%** (29822 B, zapas ~898 B); (4) `EthModule`+`OTRSP`+`OTRSP_TCP` — strona
+  WWW + OTRSP po USB **i** TCP jednoczesnie, **98,9%** (30374 B, zapas ~346 B) —
   NAJCIASNIEJSZY ze wszystkich szesciu, buduj i mierz go PRZED merge kazdej zmiany we
   wspoldzielonym kodzie (WWW/OTRSP_parse/siec), obok wariantu (1); (5) `OTRSP` — OTRSP tylko po
-  USB, bez Ethernetu, 33,7% (10356 B, bez konfiguracji sieciowej - `EthModule`/`OTRSP_TCP` oba
+  USB, bez Ethernetu, 33,7% (10340 B, bez konfiguracji sieciowej - `EthModule`/`OTRSP_TCP` oba
   wyl., wiec bez komend sieciowych po Serial); (6) `OTRSP`+`OTRSP_TCP` — OTRSP po USB **i**
-  surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **69,8%**
-  (21436 B).
+  surowym TCP (`OTRSP_TCP_PORT`, domyslnie 4534) jednoczesnie, bez strony WWW, **69,7%**
+  (21412 B).
   Uwaga: `DNSClient::getHostByName`/wirtualna metoda `connect(hostname)` w `EthernetClient`
   (~1,2 KB martwego kodu, bo klasa polimorficzna linkuje cala tabele wirtualna) to koszt JUZ
   OBECNY w kazdym buildzie z `EthernetClient` (nawet w najlzejszym WWW-bez-OTRSP) — nie jest to
@@ -107,6 +106,36 @@ zawsze.
   uzycia w wariantach bez `OTRSP` - inaczej `-Wunused-but-set-variable`, sprawdz `pio run` bez
   ostrzezen po kazdej zmianie w tym bloku). Brak kolizji z protokolem OTRSP (komendy SET to
   `AUX1`/`AUX2`, bez litery `N`; `?NAME` to QUERY z wiodacym `?`, sprawdzane przez `cmd+1`).
+- **Kolizje: 5 poprawek (2026-08-03/04).** Logika w `updateCollisions()` (wydzielona z inline petli
+  step-GPIO, patrz nizej): (1) **stary kolor po WWW** - krok GPIO liczyl kolizje PRZED obsluga
+  zadania WWW w tej samej iteracji `loop()`, wiec odpowiedz renderowala flage `port[i][3]` sprzed
+  dopiero co wykonanej zmiany (trzeba bylo recznie odswiezyc) - naprawione DODATKOWYM wywolaniem
+  `updateCollisions()` zaraz po `port[bankIdx][1]=getVal` w handlerze WWW, PRZED renderowaniem
+  odpowiedzi; (2) **OFF+OFF falszywa kolizja** - warunek `port[i][1]==port[j+4][1]` bez `!=0`
+  liczyl dwa TRX na OFF (albo jeden na OFF przy zerowym wyjsciu drugiego) jako kolizje - dodano
+  `port[i][1] != 0 &&` (websim.html `recalcErr()` mial ten warunek juz wczesniej - `si!==0` -
+  firmware nie mial, to byl PRAWDZIWY bug, nie regresja); (3) **atrybucja** - `port[i][1]`
+  (ZADANIE) porownywane z `port[j+4][1]` (WYJSCIE, nie zadanie) drugiego TRX + jedna zmiana na
+  raz (jedno wywolanie WWW = jedno `port[bankIdx][1]` + `updateCollisions()`) oznacza, ze
+  kolizja jest atrybuowana TYLKO TRX, ktory WLASNIE przelaczyl sie na zajeta antene (ten drugi,
+  juz ustabilizowany, ma `port[j][3]=0`) - NIEZALEZNIE od numeru TRX (zweryfikowane trace'em:
+  `collision_trace.py`, dwa scenariusze z odwroconym porzadkiem klikniec, oba poprawne); (4)
+  **gorny chip statusu** (`.sq`/`.on`, karta Anteny) ignorowal `port[i][3]` - pokazywal zolty +
+  nazwe zadanej anteny nawet gdy wyjscie bylo fizycznie OFF przez kolizje. Dodano
+  `.sq.r{background:#d11534}` (pierwszenstwo przed `.on`) oraz
+  `antName(port[i][3]==1 ? 0 : port[i][1])` (pokaz "OFF" zamiast nazwy zadania, zgodnie z
+  rzeczywistym stanem przekaznikow); (5) **DWA PRZEBIEGI w `updateCollisions()` (2026-08-04)** -
+  wewnatrz JEDNEGO wywolania petla po `i` CZYTA i AKTUALIZUJE `port[i+4][1]` na biezaco, wiec TRX
+  o NIZSZYM indeksie widzi wyjscie TRX o WYZSZYM indeksie SPRZED tego wywolania (jeszcze nie
+  przeliczone w tym przebiegu) - gdy "wygrany" TRX o WYZSZYM indeksie zwalniał antene,
+  zablokowany TRX o NIZSZYM indeksie NIE odzyskiwal jej w TYM SAMYM wywolaniu (dopiero po
+  recznym odswiezeniu strony - prawdziwy bug znaleziony przez uzytkownika, zaprzeczajacy
+  wczesniejszemu (blednemu) zalozeniu z punktu (3), ze auto-przejecie zawsze dziala od razu).
+  Naprawione OPAKOWANIEM calej petli po `i` w `for (byte pass = 0; pass < 2; pass++)` - drugi
+  przebieg widzi juz w pelni swieze wyjscia z przebiegu 1, wiec kolejnosc indeksow przestaje miec
+  znaczenie (zweryfikowane trace'em, scenariusz D: TRX z wyzszym indeksem trzyma antene, TRX z
+  nizszym zablokowany, wyzszy zwalnia - bez 2. przebiegu nizszy zostawal zawieszony). Ten sam
+  problem i fix zastosowany w `websim.html` (`recalcErr()` tez opakowane w `for (pass...)`).
 - **Watchdog (`<avr/wdt.h>`, zawsze wlaczony, wszystkie warianty):** `MCUSR=0; wdt_disable();`
   na SAMYM POCZATKU `setup()` (niektore bootloadery zostawiaja WDT wlaczony z krotkim timeoutem
   po poprzednim resecie - bez tego byla by petla resetow). `wdt_enable(WDTO_8S)` na SAMYM KONCU
@@ -268,9 +297,9 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   są nieszkodliwe). Warto sprawdzić też build z `-DBCD_INPUT -DPTT_BLOCKING`, żeby te gałęzie
   `#ifdef` nie uległy rozjechaniu. **Sześć wariantów do zbudowania** przy zmianach w Ethernet/OTRSP
   — patrz „Budżet pamięci" wyżej i `docs/DESIGN.md` §11. Wariant `EthModule`+`OTRSP_TCP` to
-  **domyślny build** i ma zapas ~638 B — buduj go PIERWSZY przy każdej zmianie, bo to on trafi do
+  **domyślny build** i ma zapas ~398 B — buduj go PIERWSZY przy każdej zmianie, bo to on trafi do
   każdego, kto skompiluje projekt bez modyfikacji `#define`; drugi w kolejności to
-  `EthModule`+`OTRSP`+`OTRSP_TCP` (najciaśniejszy ze wszystkich, zapas ~552 B).
+  `EthModule`+`OTRSP`+`OTRSP_TCP` (najciaśniejszy ze wszystkich, zapas ~346 B).
 - **Wygląd interfejsu WWW i protokół OTRSP** można podejrzeć bez sprzętu: `tools/websim.html`
   (odtwarza HTML/CSS firmware + symuluje `OTRSP_parse()` — dwa niezależne monitory USB/TCP,
   TX/RX kolorowane) lub `python tools/serve.py`. Przy zmianie HTML strony **lub** logiki

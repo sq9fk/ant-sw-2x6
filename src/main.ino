@@ -321,6 +321,7 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     ".sq{display:inline-flex;align-items:center;justify-content:center;width:1.5rem;height:1.5rem;"
       "border-radius:.35em;background:#2a5d6b;color:#f7f7f7;font-weight:700;font-size:.85rem;flex:0 0 auto}\r\n"
     ".sq.on{background:#f5d33c;color:#162f36}\r\n"
+    ".sq.r{background:#d11534;color:#f7f7f7}\r\n"
     ".trx{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;padding:.5rem 0;"
       "border-bottom:1px solid rgba(255,255,255,.07)}\r\n"
     ".brk{display:none}\r\n"
@@ -559,31 +560,47 @@ void setup()
 // sie zdazyl wykonac ZANIM WWW sparsowalo zadanie w tej samej iteracji loop()), wiec trzeba bylo
 // recznie odswiezyc strone, zeby zobaczyc poprawny stan - bug wystepowal losowo, w zaleznosci od
 // tego, czy poprzedni stan kolizji roznil sie od nowego.
+//
+// DWA PRZEBIEGI: w jednym przebiegu port[i+4][1] (wyjscie) jest CZYTANE i AKTUALIZOWANE w tej
+// samej petli po i, wiec TRX o NIZSZYM indeksie widzi wyjscie TRX o WYZSZYM indeksie SPRZED tego
+// wywolania (jeszcze nie przeliczone w tym przebiegu), podczas gdy TRX o WYZSZYM indeksie widzi
+// JUZ SWIEZE wyjscie TRX o nizszym indeksie. Przy zwolnieniu anteny przez "wygrany" TRX o
+// WYZSZYM indeksie ten efekt oznaczal, ze zablokowany TRX o NIZSZYM indeksie nie odzyskiwal
+// anteny w TYM SAMYM wywolaniu (dopiero przy nastepnym - w praktyce po recznym odswiezeniu
+// strony, bo odpowiedz WWW renderuje sie natychmiast po PIERWSZYM przebiegu). Drugi przebieg
+// (uzywajacy juz w pelni swiezych wyjsc z przebiegu 1) usuwa te zaleznosc od kolejnosci
+// indeksow - zweryfikowane trace'em (collision_trace.py, scenariusz D: TRX o wyzszym indeksie
+// trzyma antene, TRX o nizszym zablokowany, TRX wyzszy zwalnia -> bez 2. przebiegu nizszy
+// zostawal zablokowany az do kolejnego wywolania).
 static void updateCollisions() {
-  for (i = 0; i < Ports; i++) {
-    c = 0;
-    for (j = 0; j < Ports; j++) {
-      // SQ9FK: kolizja tylko gdy oba TRX zadaja tej samej anteny. Blokada 4<->5 (GXP11)
-      // usunieta - poz. 4 i 5 to teraz niezalezne anteny (bit3/bit4), bit7 przejalo Radio Flex.
-      if (i != j && port[i][1] == port[j + 4][1]) {
-        c++;
+  for (byte pass = 0; pass < 2; pass++) {
+    for (i = 0; i < Ports; i++) {
+      c = 0;
+      for (j = 0; j < Ports; j++) {
+        // SQ9FK: kolizja tylko gdy oba TRX zadaja TEJ SAMEJ anteny RÓŻNEJ OD OFF (0) - bez
+        // warunku != 0 dwa TRX ustawione na OFF (albo jeden na OFF, gdy wyjscie drugiego bylo
+        // juz 0) falszywie liczyly sie jako kolizja. Blokada 4<->5 (GXP11) usunieta - poz. 4 i 5
+        // to teraz niezalezne anteny (bit3/bit4), bit7 przejalo Radio Flex.
+        if (i != j && port[i][1] != 0 && port[i][1] == port[j + 4][1]) {
+          c++;
+        }
       }
-    }
-    if (c > 0) {
-      port[i][3] = 1;
+      if (c > 0) {
+        port[i][3] = 1;
 #if defined(PTT_BLOCKING)
-      if (port[i][2] == 0)
+        if (port[i][2] == 0)
 #endif
-        port[i + 4][1] = 0;               // kolizja -> wyjscie OFF
-    } else {
-      port[i][3] = 0;
+          port[i + 4][1] = 0;               // kolizja -> wyjscie OFF
+      } else {
+        port[i][3] = 0;
 #if defined(PTT_BLOCKING)
-      if (port[i][2] == 0)
+        if (port[i][2] == 0)
 #endif
-        port[i + 4][1] = port[i][1];      // brak kolizji -> wyjscie = wybor
-    }
-    if (port[i + 4][5] == 2) {
-      tx(port[i + 4][0], i);
+          port[i + 4][1] = port[i][1];      // brak kolizji -> wyjscie = wybor
+      }
+      if (port[i + 4][5] == 2) {
+        tx(port[i + 4][0], i);
+      }
     }
   }
 }
@@ -802,11 +819,22 @@ void loop() {
           out.print(F("<section class=\"card\"><div class=\"ahead\"><h2>Anteny</h2><div class=\"astat\">"));
           for (i = 0; i < Ports; i++) {
               out.print(F("<span class=\"st\"><span class=\"sq"));
-              if (port[i][1]) out.print(F(" on"));
+              // SQ9FK: port[i][1] to ZADANIE (nie zmienia sie przy kolizji) - bez rozroznienia
+              // port[i][3] kwadracik pokazywal zolty "wybrany" nawet gdy wyjscie zostalo
+              // wymuszone na OFF przez kolizje (patrz updateCollisions()). Czerwony ma
+              // pierwszenstwo przed zoltym.
+              if (port[i][3] == 1) {
+                out.print(F(" r"));
+              } else if (port[i][1]) {
+                out.print(F(" on"));
+              }
               out.print(F("\">"));
               out.print(i+1);
               out.print(F("</span><span class=\"an\">"));
-              out.print(antName(port[i][1]));
+              // SQ9FK: przy kolizji wyjscie tego TRX jest fizycznie OFF (patrz updateCollisions())
+              // - pokaz "OFF" (antName(0)) zamiast nazwy zadanej anteny, zeby chip odzwierciedlal
+              // rzeczywisty stan przekaznikow, nie samo zadanie.
+              out.print(antName(port[i][3] == 1 ? 0 : port[i][1]));
               out.print(F("</span></span>"));
           }
           out.println(F("</div></div><form method=\"get\">"));
