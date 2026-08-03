@@ -552,6 +552,42 @@ void setup()
   wdt_enable(WDTO_8S);
 }
 
+// SQ9FK: przelicza kolizje (port[i][3]) i wyjscia (port[i+4][1]) dla wszystkich TRX na podstawie
+// biezacych zadan port[i][1]. Wolana raz w loop() (krok GPIO, co iteracje) ORAZ dodatkowo zaraz
+// po sparsowaniu zadania WWW zmieniajacego port[bankIdx][1] (patrz obsluga klienta nizej) - bez
+// tego drugiego wywolania strona WWW renderowala kolor kolizji sprzed tej zmiany (krok GPIO juz
+// sie zdazyl wykonac ZANIM WWW sparsowalo zadanie w tej samej iteracji loop()), wiec trzeba bylo
+// recznie odswiezyc strone, zeby zobaczyc poprawny stan - bug wystepowal losowo, w zaleznosci od
+// tego, czy poprzedni stan kolizji roznil sie od nowego.
+static void updateCollisions() {
+  for (i = 0; i < Ports; i++) {
+    c = 0;
+    for (j = 0; j < Ports; j++) {
+      // SQ9FK: kolizja tylko gdy oba TRX zadaja tej samej anteny. Blokada 4<->5 (GXP11)
+      // usunieta - poz. 4 i 5 to teraz niezalezne anteny (bit3/bit4), bit7 przejalo Radio Flex.
+      if (i != j && port[i][1] == port[j + 4][1]) {
+        c++;
+      }
+    }
+    if (c > 0) {
+      port[i][3] = 1;
+#if defined(PTT_BLOCKING)
+      if (port[i][2] == 0)
+#endif
+        port[i + 4][1] = 0;               // kolizja -> wyjscie OFF
+    } else {
+      port[i][3] = 0;
+#if defined(PTT_BLOCKING)
+      if (port[i][2] == 0)
+#endif
+        port[i + 4][1] = port[i][1];      // brak kolizji -> wyjscie = wybor
+    }
+    if (port[i + 4][5] == 2) {
+      tx(port[i + 4][0], i);
+    }
+  }
+}
+
 void loop() {
   wdt_reset();      // SQ9FK: watchdog - jesli petla sie zawiesi (WWW/TCP/USB/cokolwiek), reset po ~8 s
 #if defined(EthModule)
@@ -587,8 +623,8 @@ void loop() {
 #endif
 
   //=====[ GPIOs 4]=================
-  for (i = 0; i < Ports; i++) {
 #if defined(BCD_INPUT)
+  for (i = 0; i < Ports; i++) {
     if (menu1state == 1 && i == enc0Pos) {
       if (port[i][1] != 7) { //SQ9FK poz. 7 = tryb BCD (sentinel); inaczej tryb reczny
         port[i][4] = 1;
@@ -598,33 +634,9 @@ void loop() {
     } else if (port[i][4] == 0) {
       rx(port[i][0], i, 0, port[i][5]);   // auto: wybor anteny z BCD radia
     }
-#endif
-
-    c = 0;
-    for (j = 0; j < Ports; j++) {
-      // SQ9FK: kolizja tylko gdy oba TRX zadaja tej samej anteny. Blokada 4<->5 (GXP11)
-      // usunieta - poz. 4 i 5 to teraz niezalezne anteny (bit3/bit4), bit7 przejalo Radio Flex.
-      if (i != j && port[i][1] == port[j + 4][1]) {
-        c++;
-      }
-    }
-    if (c > 0) {
-      port[i][3] = 1;
-#if defined(PTT_BLOCKING)
-      if (port[i][2] == 0)
-#endif
-        port[i + 4][1] = 0;               // kolizja -> wyjscie OFF
-    } else {
-      port[i][3] = 0;
-#if defined(PTT_BLOCKING)
-      if (port[i][2] == 0)
-#endif
-        port[i + 4][1] = port[i][1];      // brak kolizji -> wyjscie = wybor
-    }
-    if (port[i + 4][5] == 2) {
-      tx(port[i + 4][0], i);
-    }
   }
+#endif
+  updateCollisions();
   //=====[ Ethernet ]=================
 #if defined(EthModule)
   EthernetClient client = server.available();
@@ -774,6 +786,10 @@ void loop() {
             if (bankIdx >= 0 && bankIdx < Ports) {
               if (getVal >= 0 && getVal <= 6) {              // SQ9FK: 6 anten (bylo 7)
                 port[bankIdx][1] = getVal;
+                // SQ9FK: bez tego odpowiedz ponizej renderowala kolor kolizji sprzed tej
+                // zmiany (krok GPIO juz sie wykonal wczesniej w tej samej iteracji loop()) -
+                // trzeba bylo recznie odswiezyc strone, zeby zobaczyc poprawny stan.
+                updateCollisions();
               } else if (getVal == 20) {
                 port[bankIdx][4] = 0;
               } else if (getVal == 21) {
