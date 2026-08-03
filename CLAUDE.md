@@ -247,7 +247,11 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   wierszach TRX** (`<button class=flx>` + `POWER_SVG`, tylko `i<2`). **Bez konfigurowalnych nazw**
   (usunięte). Dawniej `bit7` = przekaźnik pasma GXP11 40 m — **blokada kolizji 4↔5 usunięta**
   (poz. 4/5 to niezależne anteny; ogólne wykrywanie kolizji zostaje). Przy edycji pilnuj spójności:
-  `tx()`, parser WWW (`F`), przyciski-ikony w wierszach TRX.
+  `tx()`, parser WWW (`F`), przyciski-ikony w wierszach TRX. **`flexState[]` jest też w `/?J`**
+  (2026-08-03, jako 3./4. pole po stanie anten) — rotator_wifi_bridge ma teraz własny przycisk
+  PWR per TRX i musi znać prawdziwy stan, nie tylko ostatnio wysłany; +36 B na wariancie
+  domyślnym, zmierzone też na najciaśniejszym (`EthModule`+`OTRSP`+`OTRSP_TCP`), patrz
+  `docs/DESIGN.md` §9. Przy zmianie formatu `/?J` zaktualizuj też `tools/serve.py`.
 - **PTT** — traktowanie PTT (odczyt + blokada) jest pod `#define PTT_BLOCKING` i domyślnie
   **wyłączone** (zmiana HW: gniazda PTT jako wyjścia). Nie włączaj bez potwierdzenia.
 

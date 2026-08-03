@@ -178,11 +178,14 @@ i kończy (`delay(1); client.stop()`).
 - `S{bank}{kod}` — `bank`=`reqBuf[7]`, `kod`=`reqBuf[8..9]`:
   `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
-- `J` — **odczyt stanu dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź `A={port[0][1]},{port[1][1]}`
-  (antena TRX1,TRX2), bez pełnej strony. Reużywa `HTTP_HEAD` zamiast nowego literału PROGMEM —
-  konsumentem jest parser na moście (szuka podciągu `A=`), nie przeglądarka, więc rezygnacja
-  z poprawnego HTML-a nic nie kosztuje, a endpoint jest tani we flashu (patrz §9). Bez tego most
-  musiałby parsować pełny HTML karty Anteny, co jest kruche przy każdej zmianie jej wyglądu.
+- `J` — **odczyt stanu dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź
+  `A={port[0][1]},{port[1][1]},{flexState[0]},{flexState[1]}` (antena TRX1,TRX2, Radio Flex/"PWR"
+  TRX1,TRX2 — czwarte i piąte pole dodane 2026-08-03, +36 B na wariancie domyślnym, patrz §9),
+  bez pełnej strony. Reużywa `HTTP_HEAD` zamiast nowego literału PROGMEM — konsumentem jest parser
+  na moście (szuka podciągu `A=`), nie przeglądarka, więc rezygnacja z poprawnego HTML-a nic nie
+  kosztuje, a endpoint jest tani we flashu. Bez tego most musiałby parsować pełny HTML karty
+  Anteny, co jest kruche przy każdej zmianie jej wyglądu. Flex dodano, żeby most mógł pokazać
+  **prawdziwy** stan przycisku PWR per TRX, nie tylko to co ostatnio wysłał.
 - `K` — **nazwy anten dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź `K=` + 6 nazw (`antName(k)`,
   k=1..6) rozdzielonych przecinkiem, tak żeby jego legenda pokazywała **prawdziwe** nazwy z tego
   urządzenia zamiast osobnej, ręcznie duplikowanej kopii po drugiej stronie. Ta sama zasada co `J`
@@ -328,6 +331,15 @@ w bloku „OTRSP TCP" (`loop()`, patrz §8) — poprzednia wersja resetowała `o
 zastąpieniu nowym, co dodatkowo **poprawiło poprawność** (stare gniazdo W5500 jest teraz
 zawsze jawnie zamykane). **Oba kanały OTRSP naraz** (`EthModule`+`OTRSP`+`OTRSP_TCP`) — od
 2026-08-01 **odblokowane**: **Flash 98,2 %** (30168 B) — zapas ~552 B, patrz niżej.
+
+**`/?J` rozszerzone o stan Radio Flex** (2026-08-03) — rotator_wifi_bridge dostał przycisk PWR
+per TRX i musiał znać **prawdziwy** stan `flexState[]`, nie tylko to co ostatnio wysłał (inaczej
+po restarcie mostu przycisk pokazywałby zawsze "off" niezależnie od rzeczywistego stanu). Dwa
+dodatkowe pola dopisane do istniejącej odpowiedzi `A=...` (ten sam trik co przy nazwie stacji w
+`/?K` — dopisanie do istniejącego printa, nie nowy endpoint): `A={ant1},{ant2},{flex1},{flex2}`.
+Koszt: **+36 B** na domyślnym wariancie (`EthModule`+`OTRSP_TCP`): **Flash 98,0 %** (30118 B) —
+zapas ~602 B. Zmierzony też najciaśniejszy wariant (`EthModule`+`OTRSP`+`OTRSP_TCP`): **Flash
+98,3 %** (30206 B) — zapas ~514 B. Oba się mieszczą z zapasem.
 
 **Watchdog + przycisk Restart** (patrz §8) dołożyły **+252 B** do wszystkich wariantów z
 `EthModule` (+46 B sam watchdog, wszystkie warianty; +206 B HTML przycisku Restart, tylko

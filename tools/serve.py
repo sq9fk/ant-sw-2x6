@@ -40,6 +40,7 @@ WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 # SQ9FK: stan anteny wybranej dla TRX1/TRX2 (0=OFF, 1..6), sluzy wylacznie do symulacji
 # /?J i /?S{bank}{kod} dla testu integracji z rotator_wifi_bridge - patrz make_handler().
 antenna_state = [0, 0]
+flex_state = [0, 0]  # Radio Flex / "PWR" output per TRX (see /?F below)
 # SQ9FK: nazwy anten 1..6 dla symulacji /?K (patrz make_handler) - domyslne jak antDefault[]
 # w src/main.ino.
 antenna_names = ["ANT1", "ANT2", "ANT3", "ANT4", "ANT5", "ANT6"]
@@ -218,13 +219,15 @@ class OtrspBridge:
 def make_handler(bridge):
     class Handler(http.server.SimpleHTTPRequestHandler):
         def do_GET(self):
-            # SQ9FK: symuluje wylacznie /?J, /?K i /?S{bank}{kod} - stan i nazwy anten (TRX1/TRX2),
-            # zeby rotator_wifi_bridge dalo sie przetestowac bez sprzetu. Nie modeluje calego
-            # urzadzenia (kolizje/PTT/BCD) - to jedyne punkty, ktorych most uzywa.
+            # SQ9FK: symuluje wylacznie /?J, /?K, /?S{bank}{kod} i /?F{bank}{0|1} - stan/nazwy
+            # anten (TRX1/TRX2) i stan Radio Flex ("PWR"), zeby rotator_wifi_bridge dalo sie
+            # przetestowac bez sprzetu. Nie modeluje calego urzadzenia (kolizje/PTT/BCD) - to
+            # jedyne punkty, ktorych most uzywa.
             if self.path.startswith("/?"):
                 query = self.path[2:]
                 if query == "J":
-                    body = f"A={antenna_state[0]},{antenna_state[1]}".encode()
+                    body = (f"A={antenna_state[0]},{antenna_state[1]},"
+                            f"{flex_state[0]},{flex_state[1]}").encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.send_header("Content-Length", str(len(body)))
@@ -244,6 +247,15 @@ def make_handler(bridge):
                     code = int(query[2:])
                     if 0 <= bank <= 1 and 0 <= code <= 6:
                         antenna_state[bank] = code
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    return
+                if len(query) == 3 and query[0] == "F" and query[1:].isdigit():
+                    bank = int(query[1]) - 1
+                    value = int(query[2])
+                    if 0 <= bank <= 1 and value in (0, 1):
+                        flex_state[bank] = value
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.end_headers()

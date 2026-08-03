@@ -657,16 +657,22 @@ void loop() {
           BufP out(client);   // SQ9FK: cala strona przez bufor (mniej segmentow TCP = szybciej)
           // SQ9FK: /?J - maszynowy odczyt stanu dla rotator_wifi_bridge (most rotor<->antena).
           // Reuzywa HTTP_HEAD (juz istniejacy PROGMEM ze statusem+naglowkami) zamiast nowego
-          // literalu - jedyny dodatkowy koszt to ten warunek + F("A=") + dwa juz uzywane print()y.
+          // literalu - jedyny dodatkowy koszt to ten warunek + F("A=") + juz uzywane print()y.
           // Tresc po HTTP_HEAD zaczyna sie resztkami "<!DOCTYPE html>..." - nieistotne, bo
-          // konsumentem jest parser na moscie (szuka podciagu "A=" i czyta dwie liczby po nim),
-          // nie przegladarka. Patrz docs/DESIGN.md.
+          // konsumentem jest parser na moscie (szuka podciagu "A=" i czyta liczby po nim), nie
+          // przegladarka. Patrz docs/DESIGN.md. Dwa ostatnie pola (2026-08-03) to stan Radio
+          // Flex (flexState[]) - most pokazuje wlasny przycisk PWR per TRX i musi znac PRAWDZIWY
+          // stan, nie tylko to co ostatnio wyslal.
           if (reqBuf[6] == 'J') {
             out.print((const __FlashStringHelper*)HTTP_HEAD);
             out.print(F("A="));
             out.print(port[0][1]);
             out.print(',');
             out.print(port[1][1]);
+            out.print(',');
+            out.print(flexState[0]);
+            out.print(',');
+            out.print(flexState[1]);
             out.done();
             break;
           }
