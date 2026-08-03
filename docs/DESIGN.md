@@ -30,16 +30,16 @@ Wszystkie `#define` są na górze `src/main.ino`.
 | `BCD_INPUT` | wył. | automatyczny wybór anteny z BCD radia (`rx()`) |
 | `PTT_BLOCKING` | wył. | odczyt PTT + blokada przełączania podczas TX |
 | `OTRSP` | wył. | sterowanie SO2R po porcie szeregowym (USB) |
-| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~808 B) |
+| `OTRSP_TCP` | **wł.** | surowe gniazdo TCP dla OTRSP — niezależne od `OTRSP`; domyślnie razem z `EthModule` (zapas ~638 B) |
 | `OTRSP_TCP_PORT` | 4534 | port surowego TCP dla OTRSP |
 | `inputHigh` | wł. | poziom aktywny wejść BCD |
 
 **Ograniczenie rozmiaru:** ATmega328 ma 30 KB flash / 2 KB RAM. `OTRSP` i `OTRSP_TCP` są
 **niezależne od siebie** — wspólny `OTRSP_parse()` kompiluje się, gdy zdefiniowany jest
 którykolwiek z nich (patrz §8). `EthModule` (strona WWW) **mieści się z każdym z nich osobno,
-oraz z oboma naraz**: samo `OTRSP` (USB) — zmierzone **95,8%**, zapas ~1,3 KB; samo `OTRSP_TCP`
-(gniazdo TCP) — zmierzone **97,4%**, zapas **~808 B**; **oba naraz**
-(`EthModule`+`OTRSP`+`OTRSP_TCP`) — zmierzone **97,6%**, zapas ~726 B, **najciaśniejszy ze
+oraz z oboma naraz**: samo `OTRSP` (USB) — zmierzone **96,3%**, zapas ~1,1 KB; samo `OTRSP_TCP`
+(gniazdo TCP) — zmierzone **97,9%**, zapas **~638 B**; **oba naraz**
+(`EthModule`+`OTRSP`+`OTRSP_TCP`) — zmierzone **98,2%**, zapas ~552 B, **najciaśniejszy ze
 wszystkich sześciu wariantów** (patrz §9). Do 2026-07-30 ta ostatnia kombinacja była zablokowana
 przez `#error` w compile-time (brakowało ~116 B); po przeglądzie bugów 2026-07-29 (odzyskane
 ~660 B z usunięcia `String`) kombinacja faktycznie się mieściła, a **2026-08-01 `#error` został
@@ -80,8 +80,10 @@ Kolejność w każdej iteracji:
    jeśli `pendingRestart` (ustawione przez `/?R1` w poprzedniej iteracji, patrz §7) —
    `wdt_enable(WDTO_15MS); while(1){}` — restart urządzenia, **przed** czymkolwiek innym w tej
    iteracji (klient WWW już dostał pełną odpowiedź w poprzedniej iteracji).
-1. **(opcja) OTRSP przez USB** — jeśli przyszła kompletna komenda serial (`serialEvent()`,
-   terminator CR), `OTRSP_parse(in_buf, Serial)`.
+1. **(opcja) OTRSP i/lub edycja sieci przez USB** — jeśli przyszła kompletna komenda serial
+   (`serialEvent()`, terminator CR): jeśli pasuje do wzorca `N{I|G|M|D}=` (od 2026-08-02, patrz
+   §7 „awaryjna edycja sieci") — obsłuż ją i odpowiedz `OK`/`ERR`; w przeciwnym razie *(opcja
+   `OTRSP`)* `OTRSP_parse(in_buf, Serial)`.
 2. **GPIO / logika przełączania** — dla każdego TRX `i`:
    - *(opcja `BCD_INPUT`)* jeśli tryb auto → `rx()` czyta antenę z BCD radia;
    - **wykrywanie kolizji**: licznik `c` porównuje `port[i][1]` (żądanie) z `port[j+4][1]`
@@ -147,8 +149,13 @@ nazw. Dawniej `bit7` = przekaźnik pasma GXP11 40 m sprzężony z poz. 4/5.
   przyjmuje bufor komendy i cel odpowiedzi (`Print&`) — używany identycznie z USB (`Serial`) i,
   przy `OTRSP_TCP`, z surowego gniazda TCP (`EthernetClient`); zero duplikacji logiki komend.
   **Kompiluje się, gdy zdefiniowany jest `OTRSP` LUB `OTRSP_TCP`** (`#if defined(OTRSP) ||
-  defined(OTRSP_TCP)`) — `serialEvent()`/`in_buf` (specyficzne dla USB) zostają pod samym
-  `OTRSP`, więc kanał TCP nie ciągnie za sobą kodu obsługi USB, którego nie potrzebuje.
+  defined(OTRSP_TCP)`) — surowy kanał TCP nie ciągnie za sobą `serialEvent()`/`in_buf` (kod
+  USB), których nie potrzebuje. Od 2026-08-02 `serialEvent()`/`in_buf` **NIE SĄ** już
+  specyficzne wyłącznie dla `OTRSP` — kompilują się też, gdy istnieje konfiguracja sieciowa
+  (`WWW_EEPROM_NAMES && (EthModule||OTRSP_TCP)`), bo obsługują TAKŻE awaryjną edycję sieci przez
+  Serial (patrz §7), niezależnie od stanu `OTRSP`. `loop()` sprawdza wzorzec `N{IGMD}=` PRZED
+  wywołaniem `OTRSP_parse()` na kanale USB — jeśli pasuje, obsługuje go i **nie** woła
+  `OTRSP_parse()` (brak kolizji: komendy SET protokołu OTRSP to `AUX1`/`AUX2`, bez litery `N`).
 - **(opcja) OTRSP przez TCP (`OTRSP_TCP`, niezależne od `OTRSP`):** dodatkowy `EthernetServer
   otrspServer(OTRSP_TCP_PORT)` (domyślnie port 4534) w `loop()`. **Połączenie trwałe** — inaczej
   niż serwer WWW (accept→jedna linia→odpowiedź→`stop()`), klient `otrspClient` jest trzymany
@@ -190,11 +197,25 @@ i kończy (`delay(1); client.stop()`).
   URL (`+`→spacja, `%XX`) do `antRAM[k]` z obcięciem do `ANT_MAXLEN`, potem `saveAntNames()`.
 - *(opcja `WWW_EEPROM_NAMES`)* `NS={nazwa}` — nazwa stacji (topbar) → `siteRAM` (`parseName()` + `saveAntNames()`).
 - *(opcja `WWW_EEPROM_NAMES`)* `N{I|G|M|D}={a.b.c.d}` — **konfiguracja sieciowa** (IP/gateway/maska/DNS)
-  zamiast na sztywno w kodzie. `parseIPField()` kopiuje wartość do bufora i woła
+  zamiast na sztywno w kodzie. Wspólna `setNetField(char code, const char* val)` (współdzielona
+  też z Serial, patrz niżej) woła `parseIPField()`, która kopiuje wartość do bufora i woła
   `IPAddress::fromString()` (biblioteka Arduino — nie własny parser); parsuje do zmiennej
   tymczasowej, commituje do żywej `ip`/`gateway`/`subnet`/`myDns` tylko gdy poprawny adres
   (błędny input jest **ignorowany**, stara wartość zostaje), potem `saveNetConfig()`. Zmiana
   wymaga restartu urządzenia (IP nie jest przeładowywane w locie).
+- **Settings zostaje rozwinięte po zapisie (2026-08-02):** każde pole Settings ma **własny**
+  `<form>`/submit (parser czyta tylko jeden parametr na żądanie), więc zapisanie całej
+  konfiguracji sieciowej to do 4 kliknięć OK z rzędu — wcześniej strona za każdym razem
+  renderowała `<details>` domyślnie zwinięte, trzeba więc było klikać „Settings” ponownie przed
+  edycją kolejnego pola. Lokalna flaga `settingsOpen` (ustawiana w każdej gałęzi edycji: nazwa
+  anteny/stacji/pole sieciowe) renderuje `<details open>` zamiast zwiniętego, gdy cokolwiek w
+  Settings zostało właśnie zapisane. W połączeniu z auto-odświeżaniem z §9 (wstrzymuje się przy
+  otwartym `[open]`) można zapisać IP/gateway/maskę/DNS po kolei bez ponownego rozwijania karty.
+- **Awaryjna edycja sieci przez Serial (2026-08-02, *(opcja `WWW_EEPROM_NAMES` && (`EthModule`
+  || `OTRSP_TCP`))*):** `N{I|G|M|D}={a.b.c.d}\r` po USB — dokładnie ten sam format co WWW, tylko
+  bez `/?`, wołający tę samą `setNetField()`; odpowiedź `OK`/`ERR`. Przydatne, gdy sieć jest źle
+  skonfigurowana i strony WWW nie da się osiągnąć. Patrz §6 (kolejność w `loop()`) i §9 (koszt
+  flash/RAM, poszerzenie guardu `serialEvent()`/`in_buf`).
 
 **Generowanie strony.** **Całość idzie przez bufor wyjścia `BufP out(client)`** (patrz §9) — `out.print`/
 `out.println`, na końcu `out.done()`. Statyczny nagłówek HTTP + `<head>` + CSS + ikona `POWER_SVG` są
@@ -286,12 +307,15 @@ out.print(siteName());`) zamiast nowego endpointu — koszt to tylko te dwa wywo
 handler `/?K`), wszystkie się mieszczą.
 
 **Domyślny build to `EthModule` + `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+):
-**Flash 97,4 %** (29912 B) — **~808 B** zapasu (patrz przegląd bugów 2026-07-29 niżej — było
-99,7 %/30630 B, ~90 B, przed tym przeglądem; i poprawki LCD/auto-odświeżania z 2026-08-02
-niżej — było 97,0 %/29810 B, ~910 B, między tymi dwoma). To drugi najciaśniejszy z sześciu
-wariantów (patrz §11; najciaśniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP` naraz, ~726 B, patrz
-niżej) i jest teraz domyślny — każda zmiana we współdzielonym kodzie (WWW HTML/CSS,
-`OTRSP_parse()`, sieć) musi być
+**Flash 97,9 %** (30082 B) — **~638 B** zapasu (patrz przegląd bugów 2026-07-29 niżej — było
+99,7 %/30630 B, ~90 B, przed tym przeglądem; poprawki LCD/auto-odświeżania z 2026-08-02 niżej —
+było 97,0 %/29810 B, ~910 B; „Settings zostaje rozwinięte" + awaryjna edycja sieci przez Serial,
+też 2026-08-02, patrz §7 — było 97,0 %/29810 B → 98,0 %/30098 B (~622 B) po samym „Settings
+zostaje rozwinięte", **spadło z powrotem** do obecnych 97,9 %/30082 B, bo `setNetField()`
+odzyskała więcej flash w handlerze WWW niż kosztował sam parser komend Serial). To drugi
+najciaśniejszy z sześciu wariantów (patrz §11; najciaśniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP`
+naraz, ~552 B, patrz niżej) i jest teraz domyślny — każda zmiana we współdzielonym kodzie (WWW
+HTML/CSS, `OTRSP_parse()`, sieć) musi być
 zbudowana i zmierzona na **obu** tych wariantach **najpierw**. Ciekawostka: sam kanał TCP
 (`EthernetServer`/`EthernetClient`) kosztuje więcej flash niż kanał USB (`serialEvent()` +
 `in_buf`), mimo że intuicyjnie wydawałoby się odwrotnie — kod OTRSP_TCP (parser + bufor + logika
@@ -303,7 +327,7 @@ w bloku „OTRSP TCP" (`loop()`, patrz §8) — poprzednia wersja resetowała `o
 `otrspClient = EthernetClient()` zamiast po prostu wołać `.stop()` na starym połączeniu przy
 zastąpieniu nowym, co dodatkowo **poprawiło poprawność** (stare gniazdo W5500 jest teraz
 zawsze jawnie zamykane). **Oba kanały OTRSP naraz** (`EthModule`+`OTRSP`+`OTRSP_TCP`) — od
-2026-08-01 **odblokowane**: **Flash 97,6 %** (29994 B) — zapas ~726 B, patrz niżej.
+2026-08-01 **odblokowane**: **Flash 98,2 %** (30168 B) — zapas ~552 B, patrz niżej.
 
 **Watchdog + przycisk Restart** (patrz §8) dołożyły **+252 B** do wszystkich wariantów z
 `EthModule` (+46 B sam watchdog, wszystkie warianty; +206 B HTML przycisku Restart, tylko
@@ -357,14 +381,30 @@ poprawkach: **Flash 97,4 %** (29912 B) — zapas ~808 B; potrójny wariant (`Eth
 `OTRSP_TCP`): **Flash 97,6 %** (29994 B) — zapas ~726 B. Zmierzono wszystkie sześć wariantów,
 wszystkie się mieszczą.
 
+**„Settings zostaje rozwinięte" + awaryjna edycja sieci przez Serial (2026-08-02, tego samego
+dnia co wyżej)** — patrz §7 za opis funkcjonalny. Koszt: flaga `settingsOpen` + warunkowy atrybut
+`open` (+~186 B na wariantach z `EthModule`, w tym refaktor pętli `N{I|G|M|D}=` w handlerze WWW
+do wspólnej `setNetField()`); poszerzenie guardu `serialEvent()`/`in_buf` na warianty (1)/(2) —
+`in_buf[64]` **+64 B RAM** tam, gdzie wcześniej nie istniał (bez zmiany na wariantach z `OTRSP`,
+gdzie już był kompilowany). Efekt netto na Flash jest **mniejszy niż suma kosztów obu zmian**,
+bo `setNetField()` (współdzielona przez WWW i Serial) jest krótsza niż usunięta duplikowana
+pętla w handlerze WWW — refaktoryzacja częściowo sfinansowała nową funkcję. Domyślny build:
+**Flash 97,9 %** (30082 B) — zapas ~638 B, RAM **55,0 %** (1127 B, +66 B względem stanu przed
+tymi dwiema zmianami); potrójny wariant: **Flash 98,2 %** (30168 B) — zapas ~552 B, RAM bez
+zmian (1127 B — `in_buf` już tam istniał). Zmierzono wszystkie sześć wariantów, wszystkie się
+mieszczą — warianty (5)/(6) (bez `EthModule`) mają guard `serialEvent()` niezmieniony (już
+kompilowany przy `OTRSP`), różnica to tylko sama funkcja `setNetField()`/dispatch (+kilkadziesiąt
+do ~500 B, zależnie od wariantu — patrz §11), pochłaniana bez trudu przy ich dużych zapasach.
+
 **Strona WWW bez OTRSP** (`EthModule` samo, static IP edytowalna przez WWW) — bezpieczniejszy
-wybór z dużym zapasem, jeśli OTRSP-TCP nie jest potrzebne: **Flash 94,3 %** (28958 B), ~1,7 KB
-wolne. **`EthModule` + `OTRSP`** (USB, bez TCP): **Flash 95,8 %** (29420 B) — zapas ~1,3 KB.
+wybór z dużym zapasem, jeśli OTRSP-TCP nie jest potrzebne: **Flash 94,9 %** (29146 B), ~1,5 KB
+wolne. **`EthModule` + `OTRSP`** (USB, bez TCP): **Flash 96,3 %** (29570 B) — zapas ~1,1 KB.
 Build z wszystkim WŁ. (BCD+PTT+strona WWW) **już się nie mieści** niezależnie od wariantu OTRSP.
 
 **Sama strona WWW kosztuje ~8 KB flash** (HTML/CSS/`BufP`/print-y w bloku obsługi klienta) — nie
-sam Ethernet. Bez WWW: `OTRSP` po USB (bez TCP, bez Ethernetu) = **33,7 %** (10356 B);
-+ `OTRSP_TCP` (USB+TCP równolegle) = **68,1 %** (20928 B).
+sam Ethernet. Bez WWW: `OTRSP` po USB (bez TCP, bez Ethernetu) = **33,7 %** (10356 B, bez
+konfiguracji sieciowej — brak `EthModule`/`OTRSP_TCP` — więc bez komend Serial `N{IGMD}=`);
++ `OTRSP_TCP` (USB+TCP równolegle) = **69,8 %** (21436 B).
 
 *Historia (przed usunięciem DHCP z projektu):* DHCP kosztowało dodatkowo ~3,8 KB
 (`Dhcp.cpp`+`EthernetUdp.cpp`, niewyłączalne osobno od reszty biblioteki). Strona WWW + DHCP
@@ -403,7 +443,8 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
 | `BCD_INPUT` | `BCDmatrixOUT`, gałąź auto w `loop()`, zakres enkodera, przyciski Manual/BCD w WWW, pozycja „7" w `show()`, cała funkcja `rx()` |
 | `PTT_BLOCKING` | warunki `if(port[i][2]==0)` w `loop()`, plakietka PTT w `show()` i WWW, odczyt PTT w `rx()` |
 | `OTRSP` \| `OTRSP_TCP` | `OTRSP_parse(char*,Print&)` — wspólne dla obu (`#if defined(OTRSP) \|\| defined(OTRSP_TCP)`) |
-| `OTRSP` | deklaracja `in_buf`/`in_len`, wywołanie w `loop()` (USB), `serialEvent()` — tylko USB, niezależne od `OTRSP_TCP` |
+| `OTRSP` \| (`WWW_EEPROM_NAMES` && (`EthModule`\|`OTRSP_TCP`)) | deklaracja `in_buf`/`in_len`/`stringComplete`, `serialEvent()` — kanał USB dla OTRSP ORAZ/LUB awaryjnej edycji sieci (`N{IGMD}=`), patrz `setNetField()` niżej |
+| `WWW_EEPROM_NAMES` && (`EthModule`\|`OTRSP_TCP`) | `netCfg`/`netCode`/`parseIPField()`/`setNetField()` — współdzielone przez formularz WWW (`N{I\|G\|M\|D}=`) i komendy Serial (`N{IGMD}=\r`) |
 
 > Wykrywanie kolizji między TRX jest **osobne** od `PTT_BLOCKING` i działa zawsze.
 
@@ -414,15 +455,16 @@ BCD/PTT/OTRSP/OTRSP_TCP jako `#ifdef` — wyłączone nie zajmują flash/RAM.
   stroną WWW **nie mieści się**; sprawdzaj te gałęzie bez `EthModule`.
 - **Sześć wariantów do sprawdzenia przy zmianach w Ethernet/OTRSP:** (1) **domyślny** —
   `#define EthModule` + `//#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po TCP,
-  **97,4% — zapas ~808 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
+  **97,9% — zapas ~638 B**) — buduj i mierz TĘ gałąź **najpierw**, przy dosłownie
   każdej zmianie w WWW/CSS/OTRSP_TCP/sieci, bo trafia do każdego kto skompiluje projekt bez
   ruszania `#define`; (2) `#define EthModule` + `//#define OTRSP` + `//#define OTRSP_TCP`
-  (strona WWW bez OTRSP, static IP, 94,3%, zapas ~1,7 KB — bezpieczniejsza alternatywa); (3)
-  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 95,8%);
+  (strona WWW bez OTRSP, static IP, 94,9%, zapas ~1,5 KB — bezpieczniejsza alternatywa); (3)
+  `#define EthModule` + `#define OTRSP` + `//#define OTRSP_TCP` (WWW + OTRSP po USB, 96,3%);
   (4) `#define EthModule` + `#define OTRSP` + `#define OTRSP_TCP` (WWW + OTRSP po USB **i** TCP
-  naraz, **97,6% — zapas ~726 B**, najciaśniejszy ze wszystkich sześciu — buduj i mierz też TĘ
+  naraz, **98,2% — zapas ~552 B**, najciaśniejszy ze wszystkich sześciu — buduj i mierz też TĘ
   gałąź **od razu po** wariancie (1), odblokowana 2026-08-01, dawny `#error` usunięty); (5)
-  `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 33,7%); (6) `#define OTRSP`
-  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 68,1%).
+  `#define OTRSP` + `//#define EthModule` (USB, bez Ethernetu, 33,7%, bez konfiguracji
+  sieciowej — brak komend Serial `N{IGMD}=`); (6) `#define OTRSP`
+  + `#define OTRSP_TCP` + `//#define EthModule` (USB+TCP równolegle, bez WWW, 69,8%).
 - Testy funkcjonalne (W5500, EEPROM, przełączanie, klient OTRSP przez TCP) — na docelowej
   stacji (brak sprzętu w CI).

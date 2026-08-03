@@ -262,6 +262,18 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     buf[n] = '\0';
     return out.fromString(buf);
   }
+  // SQ9FK: ustawia jedno pole sieciowe (I/G/M/D, patrz netCode[]) - wspolne dla formularza WWW
+  // i komend po Serial (patrz serialEvent/loop nizej), zeby nie duplikowac tej samej petli.
+  static bool setNetField(char code, const char* val) {
+    for (byte f = 0; f < 4; f++) {
+      if (code == (char)pgm_read_byte(&netCode[f])) {
+        IPAddress tmp;
+        if (parseIPField(val, tmp)) { *netCfg[f] = tmp; saveNetConfig(); return true; }
+        return false;
+      }
+    }
+    return false;
+  }
 #endif
 #endif
 #if defined(OTRSP_TCP)
@@ -441,7 +453,10 @@ byte flexState[2] = { 0, 0 };
 boolean pendingRestart = false;
 #endif
 
-#if defined(OTRSP)
+// SQ9FK: bufor linii Serial - wspolny dla OTRSP (USB, SO2R) i awaryjnej edycji IP/gateway/
+// maski/DNS po Serial (WWW_EEPROM_NAMES, patrz setNetField()/netSerialCmd() nizej) - przydatne
+// gdy siec jest zle skonfigurowana i strony WWW nie da sie osiagnac.
+#if defined(OTRSP) || (defined(WWW_EEPROM_NAMES) && (defined(EthModule) || defined(OTRSP_TCP)))
 char        in_buf[64];  // UART input buffer
 static byte in_len;      // Number of chars in buffer
 boolean stringComplete = false;  // whether the string is complete
@@ -546,10 +561,25 @@ void loop() {
 #endif
 
 
-    //=====[ OTRSP ]=================
-#if defined(OTRSP)
+    //=====[ OTRSP / edycja sieci po Serial ]=================
+#if defined(OTRSP) || (defined(WWW_EEPROM_NAMES) && (defined(EthModule) || defined(OTRSP_TCP)))
   if (stringComplete) {
+#if defined(WWW_EEPROM_NAMES) && (defined(EthModule) || defined(OTRSP_TCP))
+    // SQ9FK: N{I|G|M|D}={a.b.c.d}\r - ten sam format co WWW (/?N{kod}={wartosc}), zeby dalo sie
+    // poprawic zle skonfigurowana siec (np. zly gateway) bez dostepu do strony WWW.
+    if (in_buf[0] == 'N' && memchr("IGMD", in_buf[1], 4) && in_buf[2] == '=') {
+      Serial.println(setNetField(in_buf[1], in_buf + 3) ? F("OK") : F("ERR"));
+    }
+#if defined(OTRSP)
+    else {
+      OTRSP_parse(in_buf, Serial);   // kanal USB
+    }
+#endif
+#else
+#if defined(OTRSP)
     OTRSP_parse(in_buf, Serial);   // kanal USB
+#endif
+#endif
     stringComplete = false;
   }
 #endif
@@ -712,15 +742,7 @@ void loop() {
             saveAntNames();
             settingsOpen = true;
           } else if (reqBuf[6] == 'N' && memchr("IGMD", reqBuf[7], 4)) {
-            // SQ9FK: edycja IP/gateway/maski/DNS - parsuj do zmiennej tymczasowej, zapisz tylko
-            // gdy poprawny adres (fromString==true), zeby zle wejscie nie zepsulo zywej konfiguracji.
-            for (byte f = 0; f < 4; f++) {
-              if (reqBuf[7] == (char)pgm_read_byte(&netCode[f])) {
-                IPAddress tmp;
-                if (parseIPField(reqBuf + 9, tmp)) { *netCfg[f] = tmp; saveNetConfig(); }
-                break;
-              }
-            }
+            setNetField(reqBuf[7], reqBuf + 9);   // edycja IP/gateway/maski/DNS, patrz setNetField()
             settingsOpen = true;
           } else
 #endif
@@ -1358,9 +1380,10 @@ static void OTRSP_parse(char *cmd, Print &out) {
 }
 #endif   // OTRSP || OTRSP_TCP
 
-#if defined(OTRSP)
-// SQ9FK: serialEvent/in_buf sa specyficzne dla kanalu USB - nie kompiluja sie, gdy wlaczony
-// jest tylko OTRSP_TCP (surowy TCP ma wlasny bufor otrsp_tcp_buf, patrz blok "OTRSP TCP" w loop()).
+#if defined(OTRSP) || (defined(WWW_EEPROM_NAMES) && (defined(EthModule) || defined(OTRSP_TCP)))
+// SQ9FK: serialEvent/in_buf obsluguja kanal USB - komendy OTRSP (gdy wlaczony) ORAZ awaryjna
+// edycje sieci po Serial (patrz dispatch w loop()); OTRSP_TCP ma wlasny, niezalezny bufor
+// otrsp_tcp_buf dla surowego TCP (patrz blok "OTRSP TCP" w loop()).
 void serialEvent() {
   while (Serial.available()) {
     char inChar = (char)Serial.read();
