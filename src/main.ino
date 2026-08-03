@@ -323,6 +323,7 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     ".sq.on{background:#f5d33c;color:#162f36}\r\n"
     ".trx{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem;padding:.5rem 0;"
       "border-bottom:1px solid rgba(255,255,255,.07)}\r\n"
+    ".brk{display:none}\r\n"
     ".bcd,.bcdr{border-radius:.4em;padding:.4rem .7rem;margin-right:.35rem;min-width:5rem;"
       "font-weight:700;font-size:.9rem;display:inline-block}\r\n"
     ".bcd{background:#21505c}.bcdr{background:#d11534}\r\n"
@@ -349,8 +350,9 @@ LiquidCrystal lcd(A0, A1, 7, 6, 5, 4);     // rev. 0.3
     "@media(max-width:520px){.tb{font-size:.95rem;padding:.7rem max(.85rem,env(safe-area-inset-right)) "
       ".7rem max(.85rem,env(safe-area-inset-left))}.astat{min-width:0;flex:1 1 100%}.bcd,.bcdr{min-width:0;"
       "flex-basis:100%;margin-right:.2rem;font-size:.82rem;padding:.35rem .55rem}input[type=submit],.flx{"
-      "min-width:2.75rem;min-height:2.75rem;padding:.45rem .55rem}.flx svg{width:18px;height:18px}.trx{"
-      "gap:.5rem;padding:.65rem 0}.nm{flex-wrap:wrap}}\r\n"
+      "min-width:2.75rem;min-height:2.75rem;padding:.45rem .55rem}.flx{margin-left:0}.flx svg{width:18px;"
+      "height:18px}.trx{gap:.5rem;padding:.65rem 0}.trx input[type=submit],.trx .flx{flex:1 1 0}"
+      ".nm{flex-wrap:wrap}.brk{display:block;flex-basis:100%;height:0}}\r\n"
     "</style>\r\n</head>\r\n<body>\r\n";
 
   // SQ9FK: ikona power (wlacz/wylacz) dla przyciskow Flex - dziedziczy kolor (currentColor)
@@ -811,8 +813,16 @@ void loop() {
 #endif
                 //SQ9FK: pozycje 0..6 generowane w petli (6 anten; oszczednosc flash)
                 for (byte pos = 0; pos <= 6; pos++) {
+                  // SQ9FK: wymuszone zawiniecie PRZED antena "4" (mobile, patrz .brk w CSS) -
+                  // bez tego przy typowej szerokosci telefonu wiersz laduje jako 5+3
+                  // (4/5/6+power), z "6" i power osamotnionymi daleko od reszty siatki; 4+4 jest
+                  // rowniejsze. Wstawka MUSI wejsc miedzy zamkniecie poprzedniego tagu (\">) a
+                  // otwarcie kolejnego <input>, inaczej trafi do niezamknietego atrybutu class=.
+                  // Na szerszych ekranach .brk jest ukryte (display:none), bez wplywu.
                   if (pos == 0) {
                     out.print(F("<input type=\"submit\" name=\"S"));
+                  } else if (pos == 4) {
+                    out.print(F("\"><i class=\"brk\"></i><input type=\"submit\" name=\"S"));
                   } else {
                     out.print(F("\"><input type=\"submit\" name=\"S"));
                   }
