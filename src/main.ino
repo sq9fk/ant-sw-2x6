@@ -691,9 +691,11 @@ void loop() {
           // literalu - jedyny dodatkowy koszt to ten warunek + F("A=") + juz uzywane print()y.
           // Tresc po HTTP_HEAD zaczyna sie resztkami "<!DOCTYPE html>..." - nieistotne, bo
           // konsumentem jest parser na moscie (szuka podciagu "A=" i czyta liczby po nim), nie
-          // przegladarka. Patrz docs/DESIGN.md. Dwa ostatnie pola (2026-08-03) to stan Radio
-          // Flex (flexState[]) - most pokazuje wlasny przycisk PWR per TRX i musi znac PRAWDZIWY
-          // stan, nie tylko to co ostatnio wyslal.
+          // przegladarka. Patrz docs/DESIGN.md. 3./4. pole (2026-08-03) to stan Radio Flex
+          // (flexState[]). 5./6. pole (2026-08-04) to port[i][3] - flaga "ten TRX przegral
+          // kolizje" z updateCollisions(), juz WYLICZONA i asymetryczna (tylko przegrywajacy ma
+          // 1) - most pokazywal dotad OBA TRX na czerwono, bo sam liczyl symetryczny warunek
+          // (ant1==ant2) z pol A=ant1,ant2 zamiast poznac PRAWDZIWEGO "przegranego" stad.
           if (reqBuf[6] == 'J') {
             out.print((const __FlashStringHelper*)HTTP_HEAD);
             out.print(F("A="));
@@ -704,6 +706,10 @@ void loop() {
             out.print(flexState[0]);
             out.print(',');
             out.print(flexState[1]);
+            out.print(',');
+            out.print(port[0][3]);
+            out.print(',');
+            out.print(port[1][3]);
             out.done();
             break;
           }

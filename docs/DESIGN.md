@@ -183,13 +183,18 @@ i kończy (`delay(1); client.stop()`).
   `00..06`=antena, `20`=tryb BCD, `21`=tryb ręczny. Walidacja cyfr + `bankIdx ∈ 0..Ports-1`
   (obce żądania jak `/favicon.ico` są ignorowane — brak przypadkowych przełączeń).
 - `J` — **odczyt stanu dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź
-  `A={port[0][1]},{port[1][1]},{flexState[0]},{flexState[1]}` (antena TRX1,TRX2, Radio Flex/"PWR"
-  TRX1,TRX2 — czwarte i piąte pole dodane 2026-08-03, +36 B na wariancie domyślnym, patrz §9),
-  bez pełnej strony. Reużywa `HTTP_HEAD` zamiast nowego literału PROGMEM — konsumentem jest parser
-  na moście (szuka podciągu `A=`), nie przeglądarka, więc rezygnacja z poprawnego HTML-a nic nie
-  kosztuje, a endpoint jest tani we flashu. Bez tego most musiałby parsować pełny HTML karty
-  Anteny, co jest kruche przy każdej zmianie jej wyglądu. Flex dodano, żeby most mógł pokazać
-  **prawdziwy** stan przycisku PWR per TRX, nie tylko to co ostatnio wysłał.
+  `A={port[0][1]},{port[1][1]},{flexState[0]},{flexState[1]},{port[0][3]},{port[1][3]}` (antena
+  TRX1,TRX2; Radio Flex/"PWR" TRX1,TRX2 — 3./4. pole, dodane 2026-08-03; flaga kolizji TRX1,TRX2
+  — 5./6. pole, dodane 2026-08-04, +36 B na wariancie domyślnym, patrz §9), bez pełnej strony.
+  Reużywa `HTTP_HEAD` zamiast nowego literału PROGMEM — konsumentem jest parser na moście (szuka
+  podciągu `A=`), nie przeglądarka, więc rezygnacja z poprawnego HTML-a nic nie kosztuje, a
+  endpoint jest tani we flashu. Bez tego most musiałby parsować pełny HTML karty Anteny, co jest
+  kruche przy każdej zmianie jej wyglądu. Flex dodano, żeby most mógł pokazać **prawdziwy** stan
+  przycisku PWR per TRX, nie tylko to co ostatnio wysłał. Flaga kolizji (`port[i][3]`, patrz §9
+  „Kolizje") dodana, bo most wcześniej liczył kolizję sam, symetrycznie, z samych numerów anten
+  (`ant1==ant2`) — pokazywał **oba** TRX na czerwono zamiast tylko tego, który faktycznie
+  przegrał (`updateCollisions()` już wylicza to poprawnie, asymetrycznie, tylko nie wysyłał tego
+  dalej). Reużywa istniejące pole zamiast nowego endpointu — ten sam wzorzec co Flex.
 - `K` — **nazwy anten dla `rotator_wifi_bridge`** (SQ9FK): odpowiedź `K=` + 6 nazw (`antName(k)`,
   k=1..6) rozdzielonych przecinkiem, tak żeby jego legenda pokazywała **prawdziwe** nazwy z tego
   urządzenia zamiast osobnej, ręcznie duplikowanej kopii po drugiej stronie. Ta sama zasada co `J`
@@ -341,6 +346,19 @@ dodatkowe pola dopisane do istniejącej odpowiedzi `A=...` (ten sam trik co przy
 Koszt: **+36 B** na domyślnym wariancie (`EthModule`+`OTRSP_TCP`): **Flash 98,0 %** (30118 B) —
 zapas ~602 B. Zmierzony też najciaśniejszy wariant (`EthModule`+`OTRSP`+`OTRSP_TCP`): **Flash
 98,3 %** (30206 B) — zapas ~514 B. Oba się mieszczą z zapasem.
+
+**`/?J` rozszerzone o flagę kolizji per TRX** (2026-08-04) — most (rotator_wifi_bridge) liczył
+kolizję sam, **symetrycznie**, z samych numerów anten (`ant1==ant2 && ant1!=0`), więc pokazywał
+**oba** TRX na czerwono zamiast tylko tego, który faktycznie przegrał — `updateCollisions()` (patrz
+wyżej, „Kolizje: 5 poprawek") już liczy to poprawnie i asymetrycznie w `port[i][3]`, tylko nikt
+tego nie wysyłał dalej. Dwa kolejne pola dopisane do `A=...`, ten sam trik po raz trzeci:
+`A={ant1},{ant2},{flex1},{flex2},{col1},{col2}`. Koszt: **+36 B** na obu zmierzonych wariantach
+(taki sam koszt jak Flex wyżej — dwa pola liczbowe 0/1, ta sama struktura printów). Domyślny
+(`EthModule`+`OTRSP_TCP`): **Flash 98,8 %** (30358 B) — zapas ~362 B (z ~398 B przed tą zmianą).
+Najciaśniejszy (`EthModule`+`OTRSP`+`OTRSP_TCP`): **Flash 99,0 %** (30410 B) — zapas ~310 B (z
+~346 B). Oba mieszczą się bez zmian gdzie indziej — zapas płytszy niż przy Flex (wtedy ~514-602 B),
+bo międzyczasowe poprawki kolizji (2026-08-03/04, patrz „Kolizje: 5 poprawek") już zjadły część
+tamtego zapasu, ale wciąż bezpiecznie ponad 300 B na obu.
 
 **Watchdog + przycisk Restart** (patrz §8) dołożyły **+252 B** do wszystkich wariantów z
 `EthModule` (+46 B sam watchdog, wszystkie warianty; +206 B HTML przycisku Restart, tylko

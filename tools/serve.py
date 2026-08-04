@@ -41,6 +41,11 @@ WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 # /?J i /?S{bank}{kod} dla testu integracji z rotator_wifi_bridge - patrz make_handler().
 antenna_state = [0, 0]
 flex_state = [0, 0]  # Radio Flex / "PWR" output per TRX (see /?F below)
+# SQ9FK: kolizja per TRX (mirror firmware's port[i][3], /?J's 5./6. pole) - TRX ktory WLASNIE
+# przelaczyl sie na zajeta antene przegrywa, drugi (juz ustabilizowany) zostaje. Aktualizowane
+# w handlerze /?S ponizej, tak jak firmware'owy updateCollisions() wywolany zaraz po zmianie
+# port[bankIdx][1].
+collision_state = [0, 0]
 # SQ9FK: nazwy anten 1..6 dla symulacji /?K (patrz make_handler) - domyslne jak antDefault[]
 # w src/main.ino.
 antenna_names = ["ANT1", "ANT2", "ANT3", "ANT4", "ANT5", "ANT6"]
@@ -227,7 +232,8 @@ def make_handler(bridge):
                 query = self.path[2:]
                 if query == "J":
                     body = (f"A={antenna_state[0]},{antenna_state[1]},"
-                            f"{flex_state[0]},{flex_state[1]}").encode()
+                            f"{flex_state[0]},{flex_state[1]},"
+                            f"{collision_state[0]},{collision_state[1]}").encode()
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.send_header("Content-Length", str(len(body)))
@@ -247,6 +253,12 @@ def make_handler(bridge):
                     code = int(query[2:])
                     if 0 <= bank <= 1 and 0 <= code <= 6:
                         antenna_state[bank] = code
+                        other = 1 - bank
+                        if code != 0 and code == antenna_state[other]:
+                            collision_state[bank] = 1
+                            collision_state[other] = 0
+                        else:
+                            collision_state[bank] = 0
                     self.send_response(200)
                     self.send_header("Content-Type", "text/plain")
                     self.end_headers()

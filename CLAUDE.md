@@ -24,15 +24,15 @@ zawsze.
 - **Budżet pamięci Nano (30 KB flash / 2 KB RAM):** BCD_INPUT+PTT_BLOCKING razem z EthModule
   już się NIE mieszczą (te opcje tylko bez `EthModule`). **Domyślny build to `EthModule`+
   `OTRSP_TCP`** (strona WWW + OTRSP po TCP, np. do N1MM+, port 4534), **BCD/PTT WYŁ.,
-  WWW_EEPROM_NAMES WŁ.** — Flash **98,7%** (30322 B) / RAM **55,0%** (1127 B), **zapas ~398 B**
+  WWW_EEPROM_NAMES WŁ.** — Flash **98,8%** (30358 B) / RAM **55,0%** (1127 B), **zapas ~362 B**
   (poprawilo sie znaczaco po usunieciu `String` z `show()` przy przegladzie bugow 2026-07-29 -
   wczesniej ~90 B; od tego czasu zjadly go kolejne poprawki UX - siatka mobile 2026-08-02
-  (margin-left/4+4/flex-grow), atrybucja kolizji 2026-08-03 (patrz nizej) - RAM wzrosl o +66 B
-  wczesniej, bo `in_buf[64]` jest teraz kompilowany takze bez `OTRSP`). Jest domyslny i ma DRUGI
-  najmniejszy zapas z szesciu wariantow (najciasniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP`
-  naraz, ~346 B, patrz nizej) — KAZDA zmiana we wspoldzielonym
-  kodzie (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na OBU tych
-  wariantach NAJPIERW.
+  (margin-left/4+4/flex-grow), atrybucja kolizji 2026-08-03/04, flaga kolizji w `/?J` 2026-08-04
+  (+36 B, patrz nizej) - RAM wzrosl o +66 B wczesniej, bo `in_buf[64]` jest teraz kompilowany
+  takze bez `OTRSP`). Jest domyslny i ma DRUGI najmniejszy zapas z szesciu wariantow
+  (najciasniejszy to `EthModule`+`OTRSP`+`OTRSP_TCP` naraz, ~310 B, patrz nizej) — KAZDA zmiana
+  we wspoldzielonym kodzie (WWW HTML/CSS, OTRSP_parse(), siec) MUSI byc zbudowana i zmierzona na
+  OBU tych wariantach NAJPIERW.
   Przy dokladaniu do WWW/OTRSP_TCP pilnuj budzetu (odchudz CSS/markup, generuj w petli zamiast
   rozwijac kod, wydziel powtarzajace sie fragmenty PROGMEM do wspolnych stalych - patrz `nmOpen`/
   `nmMid`/`nmLen11`/`nmClose` nizej).
@@ -54,11 +54,11 @@ zawsze.
   **Szesc wariantow** (od 2026-08-01 ZADNA kombinacja nie jest juz blokowana — dawny `#error`
   dla `EthModule`+`OTRSP`+`OTRSP_TCP` naraz (brakowalo ~116 B) zostal USUNIETY po przegladzie
   bugow 2026-07-29, bo odzyskane ~660 B z `String` sprawilo, ze ta kombinacja faktycznie sie
-  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **98,7%**
-  (30322 B) **— zapas ~398 B**; (2) `EthModule` — strona WWW bez OTRSP, 95,7% (29394 B, zapas
+  miesci): (1) `EthModule`+`OTRSP_TCP` — strona WWW + OTRSP po TCP, **DOMYSLNY**, **98,8%**
+  (30358 B) **— zapas ~362 B**; (2) `EthModule` — strona WWW bez OTRSP, 95,7% (29394 B, zapas
   ~1,3 KB, bezpieczniejszy jesli OTRSP niepotrzebne); (3) `EthModule`+`OTRSP` — strona WWW +
   OTRSP po USB, **97,1%** (29822 B, zapas ~898 B); (4) `EthModule`+`OTRSP`+`OTRSP_TCP` — strona
-  WWW + OTRSP po USB **i** TCP jednoczesnie, **98,9%** (30374 B, zapas ~346 B) —
+  WWW + OTRSP po USB **i** TCP jednoczesnie, **99,0%** (30410 B, zapas ~310 B) —
   NAJCIASNIEJSZY ze wszystkich szesciu, buduj i mierz go PRZED merge kazdej zmiany we
   wspoldzielonym kodzie (WWW/OTRSP_parse/siec), obok wariantu (1); (5) `OTRSP` — OTRSP tylko po
   USB, bez Ethernetu, 33,7% (10340 B, bez konfiguracji sieciowej - `EthModule`/`OTRSP_TCP` oba
@@ -280,7 +280,12 @@ wszystkimi miejscami dotyczącymi danej zmiany:
   (2026-08-03, jako 3./4. pole po stanie anten) — rotator_wifi_bridge ma teraz własny przycisk
   PWR per TRX i musi znać prawdziwy stan, nie tylko ostatnio wysłany; +36 B na wariancie
   domyślnym, zmierzone też na najciaśniejszym (`EthModule`+`OTRSP`+`OTRSP_TCP`), patrz
-  `docs/DESIGN.md` §9. Przy zmianie formatu `/?J` zaktualizuj też `tools/serve.py`.
+  `docs/DESIGN.md` §9. **`port[i][3]` (flaga kolizji) też w `/?J`** (2026-08-04, jako 5./6. pole)
+  — rotator_wifi_bridge dotąd liczył kolizję sam z samych numerów anten, symetrycznie, więc
+  pokazywał oba TRX na czerwono zamiast tylko tego, który faktycznie przegrał; teraz dostaje
+  gotową, już asymetryczną flagę stąd, tym samym trikiem (dopisanie do `A=...`), znów +36 B na
+  obu wariantach, patrz `docs/DESIGN.md` §9. Przy zmianie formatu `/?J` zaktualizuj też
+  `tools/serve.py`.
 - **PTT** — traktowanie PTT (odczyt + blokada) jest pod `#define PTT_BLOCKING` i domyślnie
   **wyłączone** (zmiana HW: gniazda PTT jako wyjścia). Nie włączaj bez potwierdzenia.
 
